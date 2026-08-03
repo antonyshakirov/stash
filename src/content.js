@@ -76,12 +76,9 @@
     return ` (${side} px — открой пост для полного качества)`;
   }
 
-  // Запасной путь: тянем файл внутри страницы и отдаём его в загрузку отсюда.
-  // Подпапку в этом случае задать нельзя, файл ложится в корень Загрузок.
-  async function fallbackDownload(url, filename) {
-    const response = await fetch(url, { credentials: 'omit' });
-    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
-    const blob = await response.blob();
+  // Отдаём готовый файл в загрузку прямо из страницы. Подпапку так задать
+  // нельзя, файл ложится в корень Загрузок.
+  function saveBlob(blob, filename) {
     const objectUrl = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = objectUrl;
@@ -90,6 +87,13 @@
     link.click();
     link.remove();
     setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
+  }
+
+  // Запасной путь: тянем файл внутри страницы и сохраняем его отсюда.
+  async function fallbackDownload(url, filename) {
+    const response = await fetch(url, { credentials: 'omit' });
+    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
+    saveBlob(await response.blob(), filename);
   }
 
   async function saveOne() {
@@ -193,9 +197,13 @@
     ui.setState('busy');
 
     try {
-      const key = `${extract.downloadKey(found.post, found.slide)}#audio`;
+      // Без кода и pk ключа нет, и дедупликация выключается: общий ключ
+      // «null#audio» роднил бы между собой чужие друг другу ролики.
+      const base = extract.downloadKey(found.post, found.slide);
+      const key = base ? `${base}#audio` : null;
       const direct = found.post.audio && found.post.audio.url;
       let item;
+      let bytes = null;
 
       if (direct) {
         item = { url: direct, filename: audioName(found.post, found.slide, direct), folder: 'Audio', key };
@@ -205,7 +213,7 @@
         if (!source) throw new Error('источник не найден');
         const response = await fetch(source.url, { credentials: 'omit' });
         if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
-        const bytes = globalThis.ReelboxMp4Audio.extractAudio(await response.arrayBuffer());
+        bytes = globalThis.ReelboxMp4Audio.extractAudio(await response.arrayBuffer());
         item = {
           url: toDataUrl(bytes, 'audio/mp4'),
           filename: audioName(found.post, found.slide, 'sound.m4a'),
@@ -223,6 +231,13 @@
       } else if (result && result.duplicate) {
         ui.setState('done');
         ui.say('Этот звук уже сохранён');
+      } else if (bytes) {
+        // Запасной путь для вынутого звука: отдаём файл в загрузку прямо
+        // отсюда. Подпапку так не задать, файл ложится в корень Загрузок.
+        log('data:-адрес не прошёл:', result && result.error);
+        await saveBlob(new Blob([bytes], { type: 'audio/mp4' }), item.filename);
+        ui.setState('done');
+        ui.say('Звук сохранён в корень Загрузок (запасной путь)');
       } else {
         throw new Error((result && result.error) || 'загрузка не началась');
       }

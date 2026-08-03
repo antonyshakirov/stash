@@ -62,10 +62,55 @@ async function startDownload(item, sender) {
   }
 }
 
+// Адреса потоков видно только браузеру: плеер YouTube ходит в сеть мимо
+// обёрток над fetch, поэтому со стороны страницы их не поймать. Наблюдаем
+// запросы вкладки — ничего не меняя и не блокируя.
+const STREAM_HOSTS = ['*://*.googlevideo.com/*'];
+const STREAM_LIMIT = 80;
+const streamsByTab = new Map();
+
+function rememberStream(tabId, url) {
+  if (tabId < 0) return;
+  const list = streamsByTab.get(tabId) || [];
+  if (list.includes(url)) return;
+  list.push(url);
+  if (list.length > STREAM_LIMIT) list.shift();
+  streamsByTab.set(tabId, list);
+}
+
+try {
+  chrome.webRequest.onBeforeRequest.addListener(
+    (details) => rememberStream(details.tabId, details.url),
+    { urls: STREAM_HOSTS }
+  );
+} catch (error) {
+  console.warn('[stash] наблюдение за запросами недоступно:', error);
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => streamsByTab.delete(tabId));
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || message.kind !== 'download') return undefined;
-  startDownload(message, sender).then(sendResponse);
-  return true;
+  if (!message) return undefined;
+  const tabId = sender.tab ? sender.tab.id : -1;
+
+  if (message.kind === 'download') {
+    startDownload(message, sender).then(sendResponse);
+    return true;
+  }
+
+  if (message.kind === 'streams') {
+    sendResponse({ urls: streamsByTab.get(tabId) || [] });
+    return false;
+  }
+
+  // Ролик сменился: адреса прошлого к нему не относятся.
+  if (message.kind === 'streams-reset') {
+    streamsByTab.delete(tabId);
+    sendResponse({ ok: true });
+    return false;
+  }
+
+  return undefined;
 });
 
 // Загрузка могла стартовать и умереть позже: тогда снимаем отметку

@@ -72,11 +72,28 @@
   // запросов за кусками, и сводятся они здесь по itag.
   const streamState = { code: null, formats: [], streams: new Map(), identity: {} };
 
+  /** Адреса, которые увидел браузер: единственный надёжный их источник. */
+  async function pullStreams() {
+    if (!site.usesStreams || !site.streamFromUrl) return;
+    try {
+      const reply = await chrome.runtime.sendMessage({ kind: 'streams' });
+      for (const url of (reply && reply.urls) || []) {
+        const stream = site.streamFromUrl(url);
+        if (!stream) continue;
+        if (!streamState.streams.has(stream.itag)) log('поток', stream.itag, stream.kind);
+        streamState.streams.set(stream.itag, stream);
+      }
+    } catch (error) {
+      /* service worker мог заснуть, попробуем на следующем тике */
+    }
+  }
+
   function resetStreams(code) {
     streamState.code = code;
     streamState.formats = [];
     streamState.streams = new Map();
     streamState.identity = {};
+    chrome.runtime.sendMessage({ kind: 'streams-reset' }).catch(() => {});
   }
 
   window.addEventListener('message', (event) => {
@@ -348,6 +365,14 @@
     return fetch(target.toString(), init);
   }
 
+  /** Общий размер из заголовка Content-Range: «bytes 0-8388607/42000000». */
+  function totalFromResponse(response) {
+    const header = response.headers.get('content-range') || '';
+    const at = header.lastIndexOf('/');
+    const value = at === -1 ? NaN : Number(header.slice(at + 1));
+    return Number.isFinite(value) && value > 0 ? value : 0;
+  }
+
   async function fetchRange(entry, from, to) {
     const modes = rangeMode ? [rangeMode] : RANGE_MODES;
     let status = 0;
@@ -364,7 +389,10 @@
       if (response.ok) {
         if (!rangeMode) log('рабочий способ запроса куска:', mode);
         rangeMode = mode;
-        return new Uint8Array(await response.arrayBuffer());
+        return {
+          bytes: new Uint8Array(await response.arrayBuffer()),
+          total: totalFromResponse(response)
+        };
       }
 
       status = response.status;
@@ -400,18 +428,25 @@
   async function fetchStreamParts(entry, label) {
     log('поток', entry.itag, '| размер', entry.size, '| параметры адреса:', streamShape(entry));
 
-    const total = Number(entry.size) || 0;
-    if (!total) return [new Uint8Array(await fetchBytes(entry.url))];
-
+    let total = Number(entry.size) || 0;
     const parts = [];
     let at = 0;
 
-    while (at < total) {
-      const part = await fetchRange(entry, at, Math.min(at + RANGE_CHUNK, total) - 1);
-      if (!part.length) break;
-      parts.push(part);
-      at += part.length;
-      ui.say(`${label}: ${Math.round((at / total) * 100)}%`);
+    // Размер известен не всегда: у прогрессивных форматов его в ответе плеера
+    // может не быть. Тогда узнаём его из первого же ответа.
+    while (true) {
+      const end = total ? Math.min(at + RANGE_CHUNK, total) - 1 : at + RANGE_CHUNK - 1;
+      const chunk = await fetchRange(entry, at, end);
+
+      if (!total && chunk.total) total = chunk.total;
+      if (!chunk.bytes.length) break;
+
+      parts.push(chunk.bytes);
+      at += chunk.bytes.length;
+      ui.say(total ? `${label}: ${Math.round((at / total) * 100)}%` : `${label}: ${mb(at)} МБ`);
+
+      if (total && at >= total) break;
+      if (!total && chunk.bytes.length < RANGE_CHUNK) break;
     }
 
     return parts;
@@ -597,6 +632,7 @@
       busy = true;
       ui.setState('busy');
       ui.report(null);
+      await pullStreams();
       try {
         await saveStreamVideo(found);
       } catch (error) {
@@ -704,6 +740,7 @@
 
     if (site.usesStreams) {
       ui.report(null);
+      await pullStreams();
       try {
         await saveStreamAudio(found);
       } catch (error) {
@@ -826,6 +863,8 @@
     // Во время сохранения состояние кнопок не трогаем: иначе крутилка
     // моргала бы раз в POLL_INTERVAL.
     if (busy) return;
+
+    if (site.usesStreams) pullStreams();
 
     const found = currentTarget();
     ui.setVisible(Boolean(found));

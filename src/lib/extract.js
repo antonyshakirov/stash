@@ -39,6 +39,16 @@
     return firstString(node, ['username']);
   }
 
+  // Идентификатор приходит и строкой, и числом: pk у Instagram числовой.
+  function readId(node, keys) {
+    for (const key of keys) {
+      const value = node[key];
+      if (typeof value === 'string' && value) return value;
+      if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+    }
+    return null;
+  }
+
   function readTakenAt(node) {
     for (const key of ['taken_at', 'taken_at_timestamp', 'device_timestamp']) {
       const value = Number(node[key]);
@@ -78,25 +88,107 @@
     return videos;
   }
 
-  function mergeItem(previous, candidate) {
+  // Варианты картинки у одного объекта-медиа. Основная форма —
+  // image_versions2.candidates, старая веб-схема отдавала display_url
+  // и display_resources.
+  function readImages(node) {
+    const images = [];
+
+    const candidates = isObject(node.image_versions2) ? node.image_versions2.candidates : null;
+    if (Array.isArray(candidates)) {
+      for (const candidate of candidates) {
+        if (!isObject(candidate)) continue;
+        if (typeof candidate.url !== 'string' || !candidate.url) continue;
+        images.push({
+          url: candidate.url,
+          width: Number(candidate.width) || 0,
+          height: Number(candidate.height) || 0
+        });
+      }
+    }
+
+    if (Array.isArray(node.display_resources)) {
+      for (const resource of node.display_resources) {
+        if (!isObject(resource)) continue;
+        if (typeof resource.src !== 'string' || !resource.src) continue;
+        images.push({
+          url: resource.src,
+          width: Number(resource.config_width) || 0,
+          height: Number(resource.config_height) || 0
+        });
+      }
+    }
+
+    if (typeof node.display_url === 'string' && node.display_url) {
+      images.push({
+        url: node.display_url,
+        width: Number(node.dimensions && node.dimensions.width) || 0,
+        height: Number(node.dimensions && node.dimensions.height) || 0
+      });
+    }
+
+    return images;
+  }
+
+  /** Слайды карусели в обеих схемах: новой v1 и старой graphql. */
+  function readChildren(node) {
+    if (Array.isArray(node.carousel_media)) {
+      return node.carousel_media.filter(isObject);
+    }
+    const edges = isObject(node.edge_sidecar_to_children) ? node.edge_sidecar_to_children.edges : null;
+    if (Array.isArray(edges)) {
+      return edges.map((edge) => (isObject(edge) ? edge.node : null)).filter(isObject);
+    }
+    return [];
+  }
+
+  // У видео-поста есть и обложка, и само видео. Обложка нам не нужна:
+  // сохранение обложек отдельно от поста в границы не входит.
+  function readSlide(node, index) {
+    const videos = readVideos(node);
+    if (videos.length) return { index, kind: 'video', sources: videos };
+    const images = readImages(node);
+    if (images.length) return { index, kind: 'image', sources: images };
+    return null;
+  }
+
+  function buildPost(node, slides) {
+    return {
+      code: firstString(node, ['code', 'shortcode']),
+      pk: readId(node, ['pk', 'id', 'media_id']),
+      username: readUsername(node),
+      takenAt: readTakenAt(node),
+      slides
+    };
+  }
+
+  function postKey(post) {
+    return post.code || post.pk || (post.slides[0] && post.slides[0].sources[0].url) || null;
+  }
+
+  /** Один пост приходит несколько раз и разной полноты: берём лучшее из обоих. */
+  function mergePosts(previous, candidate) {
     if (!previous) return candidate;
+    if (!candidate) return previous;
     return {
       code: previous.code || candidate.code,
       pk: previous.pk || candidate.pk,
       username: previous.username || candidate.username,
       takenAt: previous.takenAt || candidate.takenAt,
-      videos: previous.videos.length >= candidate.videos.length ? previous.videos : candidate.videos
+      slides: previous.slides.length >= candidate.slides.length ? previous.slides : candidate.slides
     };
   }
 
   /**
-   * Обходит произвольную структуру и собирает все медиа с видео.
+   * Обходит произвольную структуру и собирает посты со слайдами.
    * Намеренно не знает путей внутри ответа: ищет по признаку, а не по адресу,
    * чтобы пережить переезд полей на стороне Instagram.
    */
   function collectMedia(payload) {
-    const found = new Map();
     const seen = new Set();
+    // Дети карусели: они уже учтены как слайды и своими постами быть не должны.
+    const consumed = new Set();
+    const drafts = [];
     const stack = [payload];
     let visited = 0;
 
@@ -106,24 +198,33 @@
       seen.add(node);
       if (++visited > MAX_NODES) break;
 
-      const videos = readVideos(node);
-      if (videos.length) {
-        const code = firstString(node, ['code', 'shortcode']);
-        const pk = firstString(node, ['pk', 'id', 'media_id']);
-        const item = {
-          code: code || null,
-          pk: pk || null,
-          username: readUsername(node),
-          takenAt: readTakenAt(node),
-          videos
-        };
-        const key = item.code || item.pk || videos[0].url;
-        found.set(key, mergeItem(found.get(key), item));
+      const children = readChildren(node);
+      if (children.length) {
+        const slides = [];
+        for (const child of children) {
+          consumed.add(child);
+          const slide = readSlide(child, slides.length + 1);
+          if (slide) slides.push(slide);
+        }
+        if (slides.length) drafts.push({ node, post: buildPost(node, slides) });
+      } else {
+        const slide = readSlide(node, 1);
+        if (slide) drafts.push({ node, post: buildPost(node, [slide]) });
       }
 
       for (const value of Object.values(node)) {
         if (isObject(value)) stack.push(value);
       }
+    }
+
+    // Отсев детей делается после обхода: порядок обхода не гарантирован,
+    // и ребёнок мог быть разобран раньше своего родителя.
+    const found = new Map();
+    for (const draft of drafts) {
+      if (consumed.has(draft.node)) continue;
+      const key = postKey(draft.post);
+      if (!key) continue;
+      found.set(key, mergePosts(found.get(key), draft.post));
     }
 
     return Array.from(found.values());
@@ -195,6 +296,7 @@
 
   return {
     collectMedia,
+    mergePosts,
     bestVideo,
     buildFilename,
     sanitizeSegment,

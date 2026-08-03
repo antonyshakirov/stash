@@ -65,11 +65,16 @@ async function startDownload(item, sender) {
 // Адреса потоков видно только браузеру: плеер YouTube ходит в сеть мимо
 // обёрток над fetch, поэтому со стороны страницы их не поймать. Наблюдаем
 // запросы вкладки — ничего не меняя и не блокируя.
-const STREAM_HOSTS = ['*://*.googlevideo.com/*'];
+const STREAM_HOSTS = ['*://*.googlevideo.com/*', '*://*.youtube.com/*'];
 const STREAM_LIMIT = 80;
 const streamsByTab = new Map();
 
+// Состояние наблюдателя нужно в отчёте: без него «ноль адресов» одинаково
+// выглядит и когда наблюдение не включилось, и когда оно ничего не видит.
+const watch = { observing: false, seen: 0, error: null };
+
 function rememberStream(tabId, url) {
+  watch.seen += 1;
   if (tabId < 0) return;
   const list = streamsByTab.get(tabId) || [];
   if (list.includes(url)) return;
@@ -80,10 +85,15 @@ function rememberStream(tabId, url) {
 
 try {
   chrome.webRequest.onBeforeRequest.addListener(
-    (details) => rememberStream(details.tabId, details.url),
+    (details) => {
+      if (details.url.indexOf('videoplayback') === -1) return;
+      rememberStream(details.tabId, details.url);
+    },
     { urls: STREAM_HOSTS }
   );
+  watch.observing = true;
 } catch (error) {
+  watch.error = String((error && error.message) || error);
   console.warn('[stash] наблюдение за запросами недоступно:', error);
 }
 
@@ -99,7 +109,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   }
 
   if (message.kind === 'streams') {
-    sendResponse({ urls: streamsByTab.get(tabId) || [] });
+    sendResponse({
+      urls: streamsByTab.get(tabId) || [],
+      observing: watch.observing,
+      seen: watch.seen,
+      error: watch.error
+    });
     return false;
   }
 

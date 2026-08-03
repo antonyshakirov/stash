@@ -77,6 +77,7 @@
     if (!site.usesStreams || !site.streamFromUrl) return;
     try {
       const reply = await chrome.runtime.sendMessage({ kind: 'streams' });
+      streamState.watch = reply || null;
       for (const url of (reply && reply.urls) || []) {
         const stream = site.streamFromUrl(url);
         if (!stream) continue;
@@ -601,6 +602,22 @@
     if (site.usesStreams) {
       lines.push(`форматов из ответа плеера: ${streamState.formats.length}`);
       lines.push(`перехвачено потоков: ${streamState.streams.size}`);
+
+      const watch = streamState.watch;
+      if (!watch) {
+        lines.push('наблюдатель: не отвечает');
+      } else {
+        lines.push(`наблюдатель: ${watch.observing ? 'включён' : 'не включился'}` +
+          `${watch.error ? ` (${watch.error})` : ''}`);
+        lines.push(`адресов у наблюдателя: ${(watch.urls || []).length}, всего замечено: ${watch.seen || 0}`);
+
+        // Если адреса есть, а потоков нет — покажем, чем они отличаются.
+        const unparsed = (watch.urls || []).filter((url) => !site.streamFromUrl(url));
+        if (unparsed.length) {
+          lines.push(`не опознано адресов: ${unparsed.length}`);
+          lines.push(`  параметры первого: ${streamShape({ url: unparsed[0] })}`);
+        }
+      }
 
       for (const stream of streamState.streams.values()) {
         lines.push(`  поток ${stream.itag} ${stream.kind} ${stream.mime || '?'} ${stream.size || 0} байт`);

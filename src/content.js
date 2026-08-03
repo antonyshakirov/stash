@@ -295,6 +295,18 @@
     );
   }
 
+  // Потоки забираются в память целиком, поэтому у длинных роликов есть
+  // потолок: лучше отказать заранее, чем уронить вкладку на середине.
+  const MAX_STREAM_BYTES = 600 * 1024 * 1024;
+
+  function checkSize(...entries) {
+    let total = 0;
+    for (const entry of entries) total += (entry && entry.size) || 0;
+    if (total > MAX_STREAM_BYTES) {
+      throw new Error(`ролик слишком большой (${Math.round(total / 1048576)} МБ)`);
+    }
+  }
+
   async function saveStreamVideo(found) {
     const post = found.post;
     if (!post || !post.picked) {
@@ -317,28 +329,13 @@
       && (!picked.video || (picked.progressive.height || 0) >= (picked.video.height || 0) || !canMux);
 
     if (progressiveWins) {
-      const item = {
-        url: picked.progressive.url,
-        filename: streamName(post, 'mp4'),
-        folder: 'Reels',
-        key
-      };
-      const force = forceRequested(key);
-      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item, force });
-
-      if (result && result.ok) {
-        clearForce();
-        ui.setState('done');
-        ui.say(`Сохранено: Загрузки/Reels/${result.filename}${force ? ' Это копия.' : ''}`);
-      } else if (result && result.duplicate) {
-        armForce(key);
-        ui.setState('done');
-        ui.say('Этот ролик уже сохранён. Нажми ещё раз, чтобы скачать копию.');
-      } else {
-        await fallbackDownload(item.url, item.filename);
-        ui.setState('done');
-        ui.say('Сохранено в корень Загрузок (запасной путь)');
-      }
+      checkSize(picked.progressive);
+      ui.say('Качаю ролик…');
+      const bytes = new Uint8Array(await fetchBytes(picked.progressive.url));
+      const said = await deliver(bytes, streamName(post, 'mp4'), 'Reels', key);
+      clearForce();
+      ui.setState('done');
+      ui.say(said);
       return;
     }
 
@@ -371,6 +368,7 @@
       return;
     }
 
+    checkSize(picked.video, picked.audio);
     ui.say('Качаю видео и звук…');
     const video = await fetchBytes(picked.video.url);
     const audio = await fetchBytes(picked.audio.url);

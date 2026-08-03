@@ -16,7 +16,7 @@
   // Символы, недопустимые в имени файла для Chrome, плюс управляющие.
   const FORBIDDEN_IN_NAME = /[\x00-\x1f\\/:*?"<>|]/g;
   // Расширения, которые Instagram реально отдаёт. Всё прочее — не наше дело.
-  const KNOWN_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'mp4']);
+  const KNOWN_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'mp4', 'm4a', 'aac', 'mp3']);
 
   function isObject(value) {
     return value !== null && typeof value === 'object';
@@ -366,7 +366,9 @@
   }
 
   function extensionFromUrl(url, kind) {
-    const fallback = kind === 'video' ? 'mp4' : 'jpg';
+    let fallback = 'jpg';
+    if (kind === 'video') fallback = 'mp4';
+    if (kind === 'audio') fallback = 'm4a';
     const key = mediaKeyFromUrl(url);
     if (!key) return fallback;
     const dot = key.lastIndexOf('.');

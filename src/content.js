@@ -167,7 +167,74 @@
     }
   }
 
-  const ui = uiModule.create({ onSaveOne: saveOne, onSaveAll: saveAll });
+  function audioName(post, slide, url) {
+    const extension = extract.extensionFromUrl(url, 'audio');
+    return extract.buildFilename(post, slide).replace(/\.[^.]+$/, '') + '.' + extension;
+  }
+
+  // Готовый m4a уходит в загрузку через data:-адрес: только так сохраняется
+  // подпапка. URL.createObjectURL в service worker MV3 недоступен, а через
+  // <a download> файл лёг бы в корень Загрузок.
+  function toDataUrl(bytes, type) {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return `data:${type};base64,${btoa(binary)}`;
+  }
+
+  async function saveAudio() {
+    if (busy) return;
+    const found = target.current();
+    if (!found || !found.post || !found.slide || found.slide.kind !== 'video') return;
+
+    busy = true;
+    ui.setState('busy');
+
+    try {
+      const key = `${extract.downloadKey(found.post, found.slide)}#audio`;
+      const direct = found.post.audio && found.post.audio.url;
+      let item;
+
+      if (direct) {
+        item = { url: direct, filename: audioName(found.post, found.slide, direct), folder: 'Audio', key };
+        log('звук по прямому адресу', direct);
+      } else {
+        const source = extract.bestSource(found.slide.sources);
+        if (!source) throw new Error('источник не найден');
+        const response = await fetch(source.url, { credentials: 'omit' });
+        if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
+        const bytes = globalThis.ReelboxMp4Audio.extractAudio(await response.arrayBuffer());
+        item = {
+          url: toDataUrl(bytes, 'audio/mp4'),
+          filename: audioName(found.post, found.slide, 'sound.m4a'),
+          folder: 'Audio',
+          key
+        };
+        log('звук вынут из ролика,', bytes.length, 'байт');
+      }
+
+      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item });
+
+      if (result && result.ok) {
+        ui.setState('done');
+        ui.say(`Сохранено: Загрузки/Audio/${result.filename}`);
+      } else if (result && result.duplicate) {
+        ui.setState('done');
+        ui.say('Этот звук уже сохранён');
+      } else {
+        throw new Error((result && result.error) || 'загрузка не началась');
+      }
+    } catch (error) {
+      ui.setState('error');
+      ui.say(`Звук не сохранён: ${String((error && error.message) || error)}`);
+    } finally {
+      busy = false;
+    }
+  }
+
+  const ui = uiModule.create({ onSaveOne: saveOne, onSaveAll: saveAll, onSaveAudio: saveAudio });
 
   chrome.runtime.onMessage.addListener((message) => {
     if (!message) return;
@@ -202,6 +269,7 @@
     const found = target.current();
     ui.setVisible(Boolean(found));
     ui.setAllCount(found && found.post ? found.post.slides.length : 0);
+    ui.setAudioAvailable(Boolean(found && found.slide && found.slide.kind === 'video'));
     ui.highlight(found ? found.element.getBoundingClientRect() : null);
     if (location.href !== lastHref) {
       lastHref = location.href;

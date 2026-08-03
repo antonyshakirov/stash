@@ -353,6 +353,14 @@ test('незнакомое расширение заменяется умолч�
   assert.strictEqual(extract.extensionFromUrl(null, 'video'), 'mp4');
 });
 
+test('у звука своё умолчание и свои расширения', () => {
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/sound_n.m4a?x=1', 'audio'), 'm4a');
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/sound_n.mp3', 'audio'), 'mp3');
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/sound_n.mp4', 'audio'), 'mp4');
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/nosuffix?x=1', 'audio'), 'm4a');
+  assert.strictEqual(extract.extensionFromUrl(null, 'audio'), 'm4a');
+});
+
 // Готовый пост нужной длины: экономит повторение в тестах имён и ключей.
 function samplePost(slideCount) {
   const slides = [];

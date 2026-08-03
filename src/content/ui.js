@@ -93,6 +93,14 @@
       <div class="wrap" hidden>
         <div class="toast" role="status"></div>
         <div class="row">
+          <button class="btn btn-audio" type="button" hidden title="Сохранить только звук">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 18V5l10-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="16" cy="16" r="3" />
+            </svg>
+          </button>
           <button class="btn btn-all" type="button" hidden title="Сохранить всю карусель"></button>
           <button class="btn btn-one" data-state="idle" type="button" title="Сохранить этот кадр">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -110,8 +118,10 @@
     const wrap = shadow.querySelector('.wrap');
     const one = shadow.querySelector('.btn-one');
     const all = shadow.querySelector('.btn-all');
+    const audio = shadow.querySelector('.btn-audio');
     const toast = shadow.querySelector('.toast');
-    const iconMarkup = shadow.querySelector('.icon').outerHTML;
+    // Именно из круглой кнопки: иконок в разметке теперь несколько.
+    const iconMarkup = one.querySelector('.icon').outerHTML;
 
     document.documentElement.appendChild(host);
 
@@ -134,6 +144,7 @@
 
     one.addEventListener('click', () => handlers.onSaveOne());
     all.addEventListener('click', () => handlers.onSaveAll());
+    audio.addEventListener('click', () => handlers.onSaveAudio());
 
     return {
       setVisible(visible) {
@@ -144,6 +155,9 @@
         const many = Number(count) > 1;
         all.hidden = !many;
         if (many) all.textContent = String(count);
+      },
+      setAudioAvailable(available) {
+        audio.hidden = !available;
       },
       setState,
       say,

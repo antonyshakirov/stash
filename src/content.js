@@ -82,7 +82,9 @@
     }
 
     if (data.kind === 'stream' && data.stream) {
+      const known = streamState.streams.has(data.stream.itag);
       streamState.streams.set(data.stream.itag, data.stream);
+      if (!known) log('поток', data.stream.itag, data.stream.kind, data.stream.mime || '');
       return;
     }
 
@@ -149,32 +151,56 @@
 
     const picked = site.choose(streamState);
     const best = picked.progressive || picked.video;
-    if (!best) return { code, picked, slides: [] };
+    const base = {
+      code,
+      pk: code,
+      username: streamState.identity.username || null,
+      takenAt: streamState.identity.takenAt || null,
+      picked
+    };
 
-    return {
+    if (!best) return Object.assign(base, { audio: null, slides: [] });
+
+    return Object.assign(base, {
       code,
       pk: code,
       username: streamState.identity.username || null,
       takenAt: streamState.identity.takenAt || null,
       audio: picked.audio ? { url: picked.audio.url, title: null } : null,
-      picked,
       slides: [{
         index: 1,
         kind: 'video',
         sources: [{ url: best.url, width: best.width, height: best.height }]
       }]
-    };
+    });
+  }
+
+  /** Главный плеер, а не первый попавшийся <video>: их на странице несколько. */
+  function largestVideo() {
+    let best = null;
+    let bestArea = 0;
+    for (const element of document.querySelectorAll('video')) {
+      const box = element.getBoundingClientRect();
+      const width = Math.max(0, Math.min(box.right, window.innerWidth) - Math.max(box.left, 0));
+      const height = Math.max(0, Math.min(box.bottom, window.innerHeight) - Math.max(box.top, 0));
+      const area = width * height;
+      if (area > bestArea) {
+        bestArea = area;
+        best = element;
+      }
+    }
+    return bestArea > 0 ? best : null;
   }
 
   function currentTarget() {
     if (!site.usesStreams) return target.current();
 
-    const element = document.querySelector('video');
+    const element = largestVideo();
     if (!element || !site.isOpen()) return null;
 
     const post = streamPost();
-    if (!post || !post.slides.length) return { element, post: null, slide: null, guessed: false };
-    return { element, post, slide: post.slides[0], guessed: false };
+    if (!post) return null;
+    return { element, post, slide: post.slides[0] || null, guessed: false };
   }
 
   function describe(post, slide) {
@@ -232,7 +258,8 @@
   }
 
   function streamName(post, extension) {
-    return extract.buildFilename(post, post.slides[0]).replace(/\.[^.]+$/, '') + '.' + extension;
+    const slide = post.slides[0] || { index: 1, kind: 'video', sources: [] };
+    return extract.buildFilename(post, slide).replace(/\.[^.]+$/, '') + '.' + extension;
   }
 
   /** Отдаёт готовые байты в загрузку: мелкое — в папку, крупное — в корень. */
@@ -253,14 +280,27 @@
     return `Сохранено в корень Загрузок: ${filename}`;
   }
 
+  function nothingYet() {
+    ui.setState('error');
+    ui.say(
+      streamState.formats.length
+        ? 'Потоки закрыты подписью. Включи воспроизведение и попробуй снова.'
+        : 'Данных ролика ещё нет. Включи воспроизведение и попробуй снова.'
+    );
+  }
+
   async function saveStreamVideo(found) {
     const post = found.post;
+    if (!post || !post.picked) {
+      nothingYet();
+      return;
+    }
+
     const picked = post.picked;
     const key = extract.downloadKey(post, found.slide);
 
     if (!picked.video && !picked.progressive) {
-      ui.setState('error');
-      ui.say('Потоки закрыты подписью. Включи воспроизведение и попробуй снова.');
+      nothingYet();
       return;
     }
 
@@ -341,12 +381,12 @@
 
   async function saveStreamAudio(found) {
     const post = found.post;
-    const picked = post.picked;
-    if (!picked.audio) {
-      ui.setState('error');
-      ui.say('Звуковой поток не пришёл. Включи воспроизведение и попробуй снова.');
+    if (!post || !post.picked || !post.picked.audio) {
+      nothingYet();
       return;
     }
+
+    const picked = post.picked;
 
     ui.say('Качаю звук…');
     const bytes = new Uint8Array(await fetchBytes(picked.audio.url));
@@ -460,7 +500,9 @@
 
   // Звук есть у ролика, а ещё у фотопоста, к которому прикреплена музыка.
   function hasAudio(found) {
-    if (!found || !found.post || !found.slide) return false;
+    if (!found || !found.post) return false;
+    if (site.usesStreams) return Boolean(found.post.picked && found.post.picked.audio);
+    if (!found.slide) return false;
     if (found.post.audio && found.post.audio.url) return true;
     return found.slide.kind === 'video';
   }
@@ -580,7 +622,7 @@
 
   // Instagram меняет адрес прокруткой ленты, события об этом нет,
   // поэтому просто смотрим на состояние страницы раз в POLL_INTERVAL.
-  let lastHref = '';
+  let lastHref = location.href;
   const poll = setInterval(() => {
     // Связь с расширением оборвана: дальше опрашивать страницу незачем,
     // и лучше сказать об этом один раз, чем ронять каждое нажатие.
@@ -610,6 +652,9 @@
     }
   }, POLL_INTERVAL);
 
+  // Код ролика запоминается до чтения страницы: иначе первый же тик опроса
+  // решит, что ролик сменился, и сотрёт только что прочитанное.
+  if (site.usesStreams) streamState.code = site.codeFromUrl(location.href);
   scanInlineJson();
 
   // Версия в консоли: единственный надёжный способ убедиться, что во вкладке

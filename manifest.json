@@ -1,9 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Reelbox",
-  "version": "0.1.0",
-  "description": "Сохраняет открытый Reels одним нажатием в папку Загрузки/Reels.",
-  "permissions": ["downloads", "storage"],
+  "version": "0.2.0",
+  "description": "Сохраняет кадры и ролики Instagram в Загрузки одним нажатием.",
+  "permissions": [
+    "downloads",
+    "storage"
+  ],
   "host_permissions": [
     "*://*.instagram.com/*",
     "*://*.cdninstagram.com/*",
@@ -13,7 +16,7 @@
     "service_worker": "src/background.js"
   },
   "action": {
-    "default_title": "Сохранить этот Reels",
+    "default_title": "Сохранить этот кадр",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",
@@ -29,14 +32,22 @@
   },
   "content_scripts": [
     {
-      "matches": ["*://*.instagram.com/*"],
-      "js": ["src/lib/extract.js", "src/lib/cache.js", "src/interceptor.js"],
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
+      "js": [
+        "src/lib/extract.js",
+        "src/lib/cache.js",
+        "src/interceptor.js"
+      ],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": false
     },
     {
-      "matches": ["*://*.instagram.com/*"],
+      "matches": [
+        "*://*.instagram.com/*"
+      ],
       "js": [
         "src/lib/extract.js",
         "src/lib/cache.js",

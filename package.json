@@ -1,8 +1,8 @@
 {
   "name": "reelbox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Расширение Chrome: сохранение Reels в Загрузки/Reels одним нажатием",
+  "description": "Расширение Chrome: сохранение кадров и роликов Instagram одним нажатием",
   "scripts": {
     "test": "node --test tests/*.test.js",
     "icons": "python3 scripts/make-icons.py"

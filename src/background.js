@@ -27,8 +27,16 @@ async function forget(key) {
   await chrome.storage.local.set({ [SAVED_KEY]: saved });
 }
 
+// Последний рубеж перед диском: в папке Audio не должно оказаться файла с
+// расширением видео. Контейнер у m4a и mp4 один и тот же, но по имени и
+// система, и человек считают такой файл роликом.
+function audioSafeName(folder, filename) {
+  return folder === 'Audio' ? filename.replace(/\.mp4$/i, '.m4a') : filename;
+}
+
 async function startDownload(item, sender) {
-  const { url, filename, folder, key } = item;
+  const { url, folder, key } = item;
+  const filename = audioSafeName(folder, item.filename);
   if (!url || !filename || !folder) return { ok: false, error: 'Нечего сохранять' };
 
   const saved = await readSaved();

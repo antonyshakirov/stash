@@ -325,5 +325,16 @@
   }, POLL_INTERVAL);
 
   scanInlineJson();
-  log('готов');
+
+  // Версия в консоли: единственный надёжный способ убедиться, что во вкладке
+  // работает свежий код, а не скрипт, оставшийся от прошлой сборки.
+  function version() {
+    try {
+      return chrome.runtime.getManifest().version;
+    } catch (error) {
+      return 'неизвестна';
+    }
+  }
+
+  log('готов, версия', version());
 })();

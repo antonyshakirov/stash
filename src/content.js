@@ -308,18 +308,62 @@
     }
   }
 
-  async function fetchRange(url, from, to) {
-    const target = new URL(url);
-    target.searchParams.set('range', `${from}-${to}`);
-
-    let response = await fetch(target.toString(), { credentials: 'omit' });
-    // Часть адресов отвечает только запросу с куками страницы.
-    if (response.status === 403) {
-      response = await fetch(target.toString(), { credentials: 'include' });
+  /** Опознавательные параметры адреса: по ним видно, какой это протокол. */
+  function streamFlags(entry) {
+    try {
+      const keys = new Set(new URL(entry.url).searchParams.keys());
+      const marks = ['sabr', 'ump', 'pot', 'itag', 'clen', 'expire', 'lmt']
+        .filter((name) => keys.has(name));
+      return marks.join(' ') || 'без опознавательных параметров';
+    } catch (error) {
+      return 'адрес не разобрался';
     }
-    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
+  }
 
-    return new Uint8Array(await response.arrayBuffer());
+  // Кусок можно попросить заголовком Range или параметром адреса, с куками
+  // страницы и без. Какой способ примет сервер, заранее неизвестно, поэтому
+  // перебираем и запоминаем сработавший.
+  const RANGE_MODES = [
+    { header: true, credentials: 'omit' },
+    { header: false, credentials: 'omit' },
+    { header: true, credentials: 'include' },
+    { header: false, credentials: 'include' }
+  ];
+
+  let rangeMode = null;
+
+  function rangeRequest(url, from, to, mode) {
+    const target = new URL(url);
+    const init = { credentials: mode.credentials };
+    if (mode.header) init.headers = { Range: `bytes=${from}-${to}` };
+    else target.searchParams.set('range', `${from}-${to}`);
+    return fetch(target.toString(), init);
+  }
+
+  async function fetchRange(entry, from, to) {
+    const modes = rangeMode ? [rangeMode] : RANGE_MODES;
+    let status = 0;
+
+    for (const mode of modes) {
+      let response;
+      try {
+        response = await rangeRequest(entry.url, from, to, mode);
+      } catch (error) {
+        log('способ не прошёл', mode, String(error && error.message));
+        continue;
+      }
+
+      if (response.ok) {
+        if (!rangeMode) log('рабочий способ запроса куска:', mode);
+        rangeMode = mode;
+        return new Uint8Array(await response.arrayBuffer());
+      }
+
+      status = response.status;
+    }
+
+    rangeMode = null;
+    throw new Error(`CDN ответил ${status || 'отказом'} — ${entry.itag}: ${streamFlags(entry)}`);
   }
 
   async function fetchStream(entry, label) {
@@ -332,7 +376,7 @@
     let at = 0;
 
     while (at < total) {
-      const part = await fetchRange(entry.url, at, Math.min(at + RANGE_CHUNK, total) - 1);
+      const part = await fetchRange(entry, at, Math.min(at + RANGE_CHUNK, total) - 1);
       if (!part.length) break;
       parts.push(part);
       at += part.length;

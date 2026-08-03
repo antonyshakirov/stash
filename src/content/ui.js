@@ -118,10 +118,13 @@
       one.innerHTML = state === 'busy' ? '<div class="spinner"></div>' : iconMarkup;
     }
 
-    function say(text) {
+    // Обычный тост гаснет сам. Sticky остаётся висеть: так показывается то,
+    // что человек обязан прочитать, например просьба перезагрузить страницу.
+    function say(text, options) {
       toast.textContent = text;
       toast.dataset.visible = '1';
       clearTimeout(toastTimer);
+      if (options && options.sticky) return;
       toastTimer = setTimeout(() => {
         toast.dataset.visible = '0';
         if (one.dataset.state !== 'busy') setState('idle');

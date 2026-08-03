@@ -32,6 +32,25 @@
     if (debugEnabled()) console.log('[reelbox]', ...args);
   }
 
+  // После обновления расширения старый контент-скрипт остаётся в открытой
+  // вкладке, но связь с расширением у него оборвана. Chrome сообщает об этом
+  // невнятным «Extension context invalidated», и человеку это ничего не даёт.
+  function contextAlive() {
+    try {
+      return Boolean(chrome.runtime && chrome.runtime.id);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  const RELOAD_HINT = 'Расширение обновилось. Перезагрузи страницу (⌘R).';
+
+  function describeError(error) {
+    const text = String((error && error.message) || error);
+    if (!contextAlive() || text.includes('Extension context invalidated')) return RELOAD_HINT;
+    return text;
+  }
+
   // --- приём данных --------------------------------------------------------
 
   window.addEventListener('message', (event) => {
@@ -134,7 +153,7 @@
       }
     } catch (error) {
       ui.setState('error');
-      ui.say(`Не получилось: ${String((error && error.message) || error)}`);
+      ui.say(`Не получилось: ${describeError(error)}`);
     } finally {
       busy = false;
     }
@@ -235,7 +254,7 @@
       }
     } catch (error) {
       ui.setState('error');
-      ui.say(`Звук не сохранён: ${String((error && error.message) || error)}`);
+      ui.say(`Звук не сохранён: ${describeError(error)}`);
     } finally {
       busy = false;
     }
@@ -260,7 +279,7 @@
         })
         .catch((error) => {
           ui.setState('error');
-          ui.say(`Не получилось: ${String((error && error.message) || error)}`);
+          ui.say(`Не получилось: ${describeError(error)}`);
         });
     }
   });
@@ -270,7 +289,17 @@
   // Instagram меняет адрес прокруткой ленты, события об этом нет,
   // поэтому просто смотрим на состояние страницы раз в POLL_INTERVAL.
   let lastHref = '';
-  setInterval(() => {
+  const poll = setInterval(() => {
+    // Связь с расширением оборвана: дальше опрашивать страницу незачем,
+    // и лучше сказать об этом один раз, чем ронять каждое нажатие.
+    if (!contextAlive()) {
+      clearInterval(poll);
+      ui.setVisible(true);
+      ui.setState('error');
+      ui.say(RELOAD_HINT, { sticky: true });
+      return;
+    }
+
     // Во время сохранения состояние кнопок не трогаем: иначе крутилка
     // моргала бы раз в POLL_INTERVAL.
     if (busy) return;

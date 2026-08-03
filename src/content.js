@@ -159,7 +159,12 @@
     }
   }
 
-  const AUDIO_MIME = { m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', mp3: 'audio/mpeg' };
+  // Тип намеренно нейтральный. Chrome при сохранении приводит расширение в
+  // соответствие с заявленным типом, и для audio/mp4 его предпочтительное
+  // расширение — mp4: запрошенный нами .m4a переписывался на .mp4 уже за
+  // пределами расширения. С octet-stream переписывать не на что, и имя
+  // остаётся тем, которое мы задали.
+  const DOWNLOAD_MIME = 'application/octet-stream';
 
   function audioName(post, slide, extension) {
     return extract.buildFilename(post, slide).replace(/\.[^.]+$/, '') + '.' + extension;
@@ -238,9 +243,8 @@
         }
       }
 
-      const mime = AUDIO_MIME[extension] || 'audio/mp4';
       const item = {
-        url: toDataUrl(bytes, mime),
+        url: toDataUrl(bytes, DOWNLOAD_MIME),
         filename: audioName(found.post, found.slide, extension),
         folder: 'Audio',
         key
@@ -259,7 +263,7 @@
         // Запасной путь: отдаём файл в загрузку прямо отсюда. Подпапку так
         // не задать, файл ложится в корень Загрузок.
         log('data:-адрес не прошёл:', result && result.error);
-        saveBlob(new Blob([bytes], { type: mime }), item.filename);
+        saveBlob(new Blob([bytes], { type: DOWNLOAD_MIME }), item.filename);
         ui.setState('done');
         ui.say('Звук сохранён в корень Загрузок (запасной путь)');
       }

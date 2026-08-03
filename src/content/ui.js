@@ -9,7 +9,7 @@
   const FALLBACK_RIGHT = 24;
   const FALLBACK_BOTTOM = 88;
   // Зазор между кнопкой и верхним краем панели.
-  const GAP = 12;
+  const GAP = 16;
   // Границы разумного: если измеренное в них не укладывается, значит поймали
   // не панель, а какую-то другую фиксированную обёртку.
   const SANE_RIGHT = [4, 80];
@@ -19,26 +19,68 @@
     return value >= range[0] && value <= range[1];
   }
 
+  function probePoints() {
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    return [
+      [w - 30, h - 24],
+      [w - 60, h - 30],
+      [w - 120, h - 34],
+      [w - 30, h - 50],
+      [w - 90, h - 52]
+    ];
+  }
+
+  /**
+   * Похоже ли это на саму панель, а не на обёртку вокруг неё. Обёртка обычно
+   * тянется на всю ширину окна и прижата к его правому краю, поэтому размеры
+   * и отступ справа отсеивают её.
+   */
+  function plausibleDock(node) {
+    const style = getComputedStyle(node);
+    if (style.position !== 'fixed') return null;
+
+    const rect = node.getBoundingClientRect();
+    if (rect.height < 32 || rect.height > 120) return null;
+    if (rect.width < 120 || rect.width > 640) return null;
+    if (rect.bottom < window.innerHeight - 80) return null;
+    if (rect.right > window.innerWidth - 8) return null;
+
+    return { rect, style, area: rect.width * rect.height };
+  }
+
   /**
    * Панель «Messages» прибита к правому нижнему углу. Ищем её не по классам —
    * они генерируются и меняются от сборки к сборке, — а по тому, что реально
-   * нарисовано в этом углу экрана.
+   * нарисовано в этом углу экрана. Пробуем несколько точек и берём самого
+   * мелкого подходящего кандидата: это и есть панель, а не контейнер вокруг.
    */
   function findDock(host) {
-    let node = document.elementFromPoint(window.innerWidth - 60, window.innerHeight - 34);
+    const found = [];
 
-    for (let depth = 0; node && depth < 10; depth += 1) {
-      if (node === host || node === document.body || node === document.documentElement) return null;
-      if (getComputedStyle(node).position === 'fixed') {
-        const rect = node.getBoundingClientRect();
-        const tallEnough = rect.height > 24 && rect.height < 140;
-        const atBottom = rect.bottom > window.innerHeight - 60;
-        if (tallEnough && atBottom) return rect;
+    for (const [x, y] of probePoints()) {
+      let node = document.elementFromPoint(x, y);
+      for (let depth = 0; node && depth < 10; depth += 1) {
+        if (node === host || node === document.body || node === document.documentElement) break;
+        const candidate = plausibleDock(node);
+        if (candidate) found.push(candidate);
+        node = node.parentElement;
       }
-      node = node.parentElement;
     }
 
-    return null;
+    if (!found.length) return null;
+    found.sort((a, b) => a.area - b.area);
+    return found[0];
+  }
+
+  function parseRgb(color) {
+    const match = /rgba?\(([^)]+)\)/.exec(color || '');
+    if (!match) return null;
+    const parts = match[1].split(',').map((piece) => Number(piece.trim()));
+    if (parts.length < 3 || parts.some((value) => !Number.isFinite(value))) return null;
+    // Прозрачный фон брать не у чего: значит поймали не панель.
+    if (parts.length > 3 && parts[3] < 0.2) return null;
+    return parts;
   }
 
   function create(handlers) {
@@ -65,12 +107,16 @@
         /* Под панель «Messages»: тот же тёмный тон, без обводки, и наведение
            подсветкой, а не увеличением. Instagram ничего не масштабирует при
            наведении, поэтому scale выглядел бы здесь чужеродно. */
+        /* Фон и подсветка берутся с самой панели «Messages», см. applySurface.
+           Значения ниже — только на случай, если панели на странице нет.
+           Наведение — накладка поверх фона, а не другой цвет: так оно
+           одинаково уместно и в тёмной теме, и в светлой. */
         .btn {
           width: 44px;
           height: 44px;
           border-radius: 50%;
           border: 0;
-          background: rgba(38, 38, 38, 0.92);
+          background: var(--reelbox-surface, rgba(38, 38, 38, 0.92));
           backdrop-filter: blur(12px);
           color: #fff;
           display: grid;
@@ -79,11 +125,12 @@
           padding: 0;
           font-size: 14px;
           font-weight: 600;
-          transition: background 150ms ease, opacity 150ms ease;
+          transition: box-shadow 150ms ease, opacity 150ms ease;
         }
-        .btn:hover { background: rgba(58, 58, 58, 0.95); }
-        .btn:active { background: rgba(28, 28, 28, 0.95); }
-        .btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+        .btn:hover { box-shadow: inset 0 0 0 999px var(--reelbox-overlay, rgba(255, 255, 255, 0.08)); }
+        .btn:active { box-shadow: inset 0 0 0 999px var(--reelbox-overlay-strong, rgba(255, 255, 255, 0.16)); }
+        /* Обводка внутрь: снаружи она наползала на панель «Messages». */
+        .btn:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
         .btn[hidden] { display: none; }
         .btn[data-state="busy"] { opacity: 0.7; cursor: progress; }
         .btn[data-state="done"] { background: rgba(28, 120, 60, 0.86); }
@@ -168,8 +215,28 @@
       }, TOAST_TIME);
     }
 
-    one.addEventListener('click', () => handlers.onSaveOne());
-    audio.addEventListener('click', () => handlers.onSaveAudio());
+    // Мышь фокус не оставляет: белое кольцо после клика выглядело поломкой.
+    // Для клавиатуры обводка остаётся, focus-visible на blur не реагирует.
+    function press(handler) {
+      return (event) => {
+        event.currentTarget.blur();
+        handler();
+      };
+    }
+
+    one.addEventListener('click', press(() => handlers.onSaveOne()));
+    audio.addEventListener('click', press(() => handlers.onSaveAudio()));
+
+    // Фон и подсветку берём с панели, а не подбираем на глаз: тогда кнопка
+    // остаётся её частью и при смене темы, и при перекраске у Instagram.
+    function applySurface(color) {
+      const rgb = parseRgb(color);
+      if (!rgb) return;
+      const light = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] > 140;
+      wrap.style.setProperty('--reelbox-surface', color);
+      wrap.style.setProperty('--reelbox-overlay', light ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)');
+      wrap.style.setProperty('--reelbox-overlay-strong', light ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.16)');
+    }
 
     function align() {
       const dock = findDock(host);
@@ -177,12 +244,13 @@
       let bottom = FALLBACK_BOTTOM;
 
       if (dock) {
-        const measuredRight = Math.round(window.innerWidth - dock.right);
-        const measuredBottom = Math.round(window.innerHeight - dock.top + GAP);
+        const measuredRight = Math.round(window.innerWidth - dock.rect.right);
+        const measuredBottom = Math.round(window.innerHeight - dock.rect.top + GAP);
         if (within(measuredRight, SANE_RIGHT) && within(measuredBottom, SANE_BOTTOM)) {
           right = measuredRight;
           bottom = measuredBottom;
         }
+        applySurface(dock.style.backgroundColor);
       }
 
       wrap.style.right = `${right}px`;

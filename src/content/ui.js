@@ -5,6 +5,41 @@
 
 (function (root) {
   const TOAST_TIME = 2600;
+  // Отступы на случай, когда панели «Messages» на странице нет.
+  const FALLBACK_RIGHT = 24;
+  const FALLBACK_BOTTOM = 88;
+  // Зазор между кнопкой и верхним краем панели.
+  const GAP = 12;
+  // Границы разумного: если измеренное в них не укладывается, значит поймали
+  // не панель, а какую-то другую фиксированную обёртку.
+  const SANE_RIGHT = [4, 80];
+  const SANE_BOTTOM = [40, 260];
+
+  function within(value, range) {
+    return value >= range[0] && value <= range[1];
+  }
+
+  /**
+   * Панель «Messages» прибита к правому нижнему углу. Ищем её не по классам —
+   * они генерируются и меняются от сборки к сборке, — а по тому, что реально
+   * нарисовано в этом углу экрана.
+   */
+  function findDock(host) {
+    let node = document.elementFromPoint(window.innerWidth - 60, window.innerHeight - 34);
+
+    for (let depth = 0; node && depth < 10; depth += 1) {
+      if (node === host || node === document.body || node === document.documentElement) return null;
+      if (getComputedStyle(node).position === 'fixed') {
+        const rect = node.getBoundingClientRect();
+        const tallEnough = rect.height > 24 && rect.height < 140;
+        const atBottom = rect.bottom > window.innerHeight - 60;
+        if (tallEnough && atBottom) return rect;
+      }
+      node = node.parentElement;
+    }
+
+    return null;
+  }
 
   function create(handlers) {
     const host = document.createElement('div');
@@ -27,12 +62,15 @@
         }
         .wrap[hidden] { display: none; }
         .row { display: flex; align-items: center; gap: 8px; }
+        /* Под панель «Messages»: тот же тёмный тон, без обводки, и наведение
+           подсветкой, а не увеличением. Instagram ничего не масштабирует при
+           наведении, поэтому scale выглядел бы здесь чужеродно. */
         .btn {
           width: 44px;
           height: 44px;
           border-radius: 50%;
-          border: 1px solid rgba(255, 255, 255, 0.18);
-          background: rgba(20, 20, 22, 0.62);
+          border: 0;
+          background: rgba(38, 38, 38, 0.92);
           backdrop-filter: blur(12px);
           color: #fff;
           display: grid;
@@ -41,10 +79,10 @@
           padding: 0;
           font-size: 14px;
           font-weight: 600;
-          transition: background 150ms ease, transform 150ms ease, opacity 150ms ease;
+          transition: background 150ms ease, opacity 150ms ease;
         }
-        .btn:hover { background: rgba(20, 20, 22, 0.86); transform: scale(1.05); }
-        .btn:active { transform: scale(0.96); }
+        .btn:hover { background: rgba(58, 58, 58, 0.95); }
+        .btn:active { background: rgba(28, 28, 28, 0.95); }
         .btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
         .btn[hidden] { display: none; }
         .btn[data-state="busy"] { opacity: 0.7; cursor: progress; }
@@ -75,7 +113,6 @@
         .toast[data-visible="1"] { opacity: 1; transform: none; }
         @media (prefers-reduced-motion: reduce) {
           .btn, .toast { transition: none; }
-          .btn:hover { transform: none; }
           .spinner { animation-duration: 1600ms; }
         }
       </style>
@@ -134,9 +171,30 @@
     one.addEventListener('click', () => handlers.onSaveOne());
     audio.addEventListener('click', () => handlers.onSaveAudio());
 
+    function align() {
+      const dock = findDock(host);
+      let right = FALLBACK_RIGHT;
+      let bottom = FALLBACK_BOTTOM;
+
+      if (dock) {
+        const measuredRight = Math.round(window.innerWidth - dock.right);
+        const measuredBottom = Math.round(window.innerHeight - dock.top + GAP);
+        if (within(measuredRight, SANE_RIGHT) && within(measuredBottom, SANE_BOTTOM)) {
+          right = measuredRight;
+          bottom = measuredBottom;
+        }
+      }
+
+      wrap.style.right = `${right}px`;
+      wrap.style.bottom = `${bottom}px`;
+    }
+
+    window.addEventListener('resize', align);
+
     return {
       setVisible(visible) {
         wrap.hidden = !visible;
+        if (visible) align();
       },
       setAudioAvailable(available) {
         audio.hidden = !available;

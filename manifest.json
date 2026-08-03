@@ -37,7 +37,7 @@
     },
     {
       "matches": ["*://*.instagram.com/*"],
-      "js": ["src/lib/extract.js", "src/lib/cache.js", "src/content.js"],
+      "js": ["src/lib/extract.js", "src/lib/cache.js", "src/content/target.js", "src/content.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

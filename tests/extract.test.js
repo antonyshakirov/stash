@@ -241,6 +241,41 @@ test('переживает циклическую структуру', () => {
   assert.strictEqual(extract.collectMedia(payload).length, 1);
 });
 
+test('ключ CDN одинаков у одного файла в разных размерах', () => {
+  const small = 'https://scontent-a.cdninstagram.com/v/t51.2885-15/123_456_n.jpg?stp=dst-jpg_e35_p640x640&oh=aa&oe=bb';
+  const large = 'https://scontent-z.cdninstagram.com/v/t51.2885-15/123_456_n.jpg?stp=dst-jpg_e35_p1440x1440&oh=cc&oe=dd';
+  assert.strictEqual(extract.mediaKeyFromUrl(small), '123_456_n.jpg');
+  assert.strictEqual(extract.mediaKeyFromUrl(small), extract.mediaKeyFromUrl(large));
+});
+
+test('ключ CDN различает разные файлы', () => {
+  assert.notStrictEqual(
+    extract.mediaKeyFromUrl('https://cdn/v/t51/111_n.jpg?x=1'),
+    extract.mediaKeyFromUrl('https://cdn/v/t51/222_n.jpg?x=1')
+  );
+});
+
+test('ключ CDN не строится из мусора', () => {
+  assert.strictEqual(extract.mediaKeyFromUrl(null), null);
+  assert.strictEqual(extract.mediaKeyFromUrl(''), null);
+  assert.strictEqual(extract.mediaKeyFromUrl(42), null);
+  assert.strictEqual(extract.mediaKeyFromUrl('https://cdn/v/t51/'), null);
+});
+
+test('расширение читается из адреса с параметрами', () => {
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/a_n.jpg?stp=p1080x1080', 'image'), 'jpg');
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/a_n.webp?x=1', 'image'), 'webp');
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/a_n.heic', 'image'), 'heic');
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/a_n.MP4?x=1', 'video'), 'mp4');
+});
+
+test('незнакомое расширение заменяется умолчанием по типу', () => {
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/a_n.bin', 'image'), 'jpg');
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/a_n.bin', 'video'), 'mp4');
+  assert.strictEqual(extract.extensionFromUrl('https://cdn/v/noext?x=1', 'image'), 'jpg');
+  assert.strictEqual(extract.extensionFromUrl(null, 'video'), 'mp4');
+});
+
 test('выбирает вариант с наибольшим разрешением', () => {
   const posts = extract.collectMedia(sampleResponse());
   const best = extract.bestVideo(posts[0].slides[0].sources);

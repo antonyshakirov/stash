@@ -15,6 +15,8 @@
   const POST_SEGMENTS = new Set(['reel', 'reels', 'p', 'tv']);
   // Символы, недопустимые в имени файла для Chrome, плюс управляющие.
   const FORBIDDEN_IN_NAME = /[\x00-\x1f\\/:*?"<>|]/g;
+  // Расширения, которые Instagram реально отдаёт. Всё прочее — не наше дело.
+  const KNOWN_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'mp4']);
 
   function isObject(value) {
     return value !== null && typeof value === 'object';
@@ -294,9 +296,33 @@
     return typeof url === 'string' && /^https?:\/\//i.test(url);
   }
 
+  /**
+   * Последний сегмент пути CDN-адреса. У Instagram он один и тот же для
+   * одного файла в любом размере: размер живёт в query (`stp`), подпись в
+   * `oh` и `oe`, и они меняются от запроса к запросу.
+   */
+  function mediaKeyFromUrl(url) {
+    if (typeof url !== 'string' || !url) return null;
+    const path = url.split('?')[0].split('#')[0];
+    const segment = path.slice(path.lastIndexOf('/') + 1);
+    return segment || null;
+  }
+
+  function extensionFromUrl(url, kind) {
+    const fallback = kind === 'video' ? 'mp4' : 'jpg';
+    const key = mediaKeyFromUrl(url);
+    if (!key) return fallback;
+    const dot = key.lastIndexOf('.');
+    if (dot < 1) return fallback;
+    const extension = key.slice(dot + 1).toLowerCase();
+    return KNOWN_EXTENSIONS.has(extension) ? extension : fallback;
+  }
+
   return {
     collectMedia,
     mergePosts,
+    mediaKeyFromUrl,
+    extensionFromUrl,
     bestVideo,
     buildFilename,
     sanitizeSegment,

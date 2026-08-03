@@ -76,6 +76,27 @@
 
   // --- сохранение ----------------------------------------------------------
 
+  // Повтор не запрещён навсегда: первое нажатие сообщает, что файл уже есть,
+  // второе подряд сохраняет копию. Случайный дубль так не появится, но и
+  // застрять невозможно, если прошлый файл сохранился плохо.
+  const FORCE_WINDOW = 8000;
+  let forceKey = null;
+  let forceUntil = 0;
+
+  function forceRequested(key) {
+    return Boolean(key) && forceKey === key && Date.now() < forceUntil;
+  }
+
+  function armForce(key) {
+    forceKey = key;
+    forceUntil = Date.now() + FORCE_WINDOW;
+  }
+
+  function clearForce() {
+    forceKey = null;
+    forceUntil = 0;
+  }
+
   function describe(post, slide) {
     const source = extract.bestSource(slide.sources);
     if (!source) return null;
@@ -136,15 +157,19 @@
     log('сохраняю', item);
 
     try {
-      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item });
+      const force = forceRequested(item.key);
+      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item, force });
 
       if (result && result.ok) {
+        clearForce();
         const guess = found.guessed ? ' Слайд не опознан, сохранил первый.' : '';
+        const copy = force ? ' Это копия.' : '';
         ui.setState('done');
-        ui.say(`Сохранено: Загрузки/${item.folder}/${result.filename}${smallNote(item)}${guess}`);
+        ui.say(`Сохранено: Загрузки/${item.folder}/${result.filename}${smallNote(item)}${guess}${copy}`);
       } else if (result && result.duplicate) {
+        armForce(item.key);
         ui.setState('done');
-        ui.say('Этот кадр уже сохранён');
+        ui.say('Этот кадр уже сохранён. Нажми ещё раз, чтобы скачать копию.');
       } else {
         log('основной путь не прошёл:', result && result.error);
         await fallbackDownload(item.url, item.filename);
@@ -251,14 +276,17 @@
       };
       log('звук:', path, '| слайд:', found.slide.kind, '| файл:', item.filename, '|', bytes.length, 'байт');
 
-      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item });
+      const force = forceRequested(key);
+      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item, force });
 
       if (result && result.ok) {
+        clearForce();
         ui.setState('done');
-        ui.say(`Сохранено: Загрузки/Audio/${result.filename}`);
+        ui.say(`Сохранено: Загрузки/Audio/${result.filename}${force ? ' Это копия.' : ''}`);
       } else if (result && result.duplicate) {
+        armForce(key);
         ui.setState('done');
-        ui.say('Этот звук уже сохранён');
+        ui.say('Этот звук уже сохранён. Нажми ещё раз, чтобы скачать копию.');
       } else {
         // Запасной путь: отдаём файл в загрузку прямо отсюда. Подпапку так
         // не задать, файл ложится в корень Загрузок.

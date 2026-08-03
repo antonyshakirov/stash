@@ -35,12 +35,15 @@ function audioSafeName(folder, filename) {
 }
 
 async function startDownload(item, sender) {
-  const { url, folder, key } = item;
+  const { url, folder, key, force } = item;
   const filename = audioSafeName(folder, item.filename);
   if (!url || !filename || !folder) return { ok: false, error: 'Нечего сохранять' };
 
+  // force приходит со второго нажатия подряд: человек уже знает, что файл
+  // есть, и просит копию. Память о сохранённом бережёт от случайных дублей,
+  // но запирать в ней нельзя — прошлый файл мог сохраниться плохо.
   const saved = await readSaved();
-  if (key && saved[key]) {
+  if (key && !force && saved[key]) {
     return { ok: false, duplicate: true, filename: saved[key].filename };
   }
 

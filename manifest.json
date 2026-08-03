@@ -51,6 +51,7 @@
       "js": [
         "src/lib/extract.js",
         "src/lib/cache.js",
+        "src/lib/mp4audio.js",
         "src/content/target.js",
         "src/content/ui.js",
         "src/content.js"

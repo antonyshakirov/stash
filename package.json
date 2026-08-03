@@ -1,0 +1,11 @@
+{
+  "name": "reelbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Расширение Chrome: сохранение Reels в Загрузки/Reels одним нажатием",
+  "scripts": {
+    "test": "node --test tests/extract.test.js",
+    "icons": "python3 scripts/make-icons.py"
+  },
+  "license": "UNLICENSED"
+}

@@ -1,14 +1,14 @@
-# Reelbox — картинки и карусели. План реализации
+# Stash — картинки и карусели. План реализации
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** научить Reelbox сохранять картинки Instagram — одиночные, слайды каруселей, кадры из ленты, сетки профиля и сторис — по одному нажатию на слайд или разом на всю карусель.
+**Goal:** научить Stash сохранять картинки Instagram — одиночные, слайды каруселей, кадры из ленты, сетки профиля и сторис — по одному нажатию на слайд или разом на всю карусель.
 
 **Architecture:** ядро `extract.js` переходит с плоского списка роликов на модель «пост со слайдами», где Reels становится постом с одним слайдом. Картинка на экране находит свой слайд сопоставлением стабильного сегмента пути CDN-адреса, и этот один механизм закрывает все четыре поверхности сразу. DOM-часть `content.js` разбирается на три файла с одной ответственностью у каждого, а чистая логика уезжает в `src/lib/` под тесты.
 
 **Tech Stack:** Chrome Manifest V3, чистый JavaScript без сборки и зависимостей, `node --test` для юнит-тестов.
 
-Спека: [../specs/2026-08-03-reelbox-images-design.md](../specs/2026-08-03-reelbox-images-design.md)
+Спека: [../specs/2026-08-03-stash-images-design.md](../specs/2026-08-03-stash-images-design.md)
 
 ## Global Constraints
 
@@ -714,7 +714,7 @@ git commit -m "feat: имена слайдов, папка по типу и кл
 **Interfaces:**
 - Consumes: `collectMedia`, `mergePosts`, `mediaKeyFromUrl` из Tasks 1–2
 - Produces:
-  - `ReelboxCache.create() → cache`
+  - `StashCache.create() → cache`
   - `cache.ingest(posts) → number` — сколько постов принято
   - `cache.get(id) → Post|null`
   - `cache.findByMediaKey(key) → { post, slide }|null`
@@ -826,8 +826,8 @@ Expected: FAIL — `Cannot find module '../src/lib/cache.js'`
 // Чистый модуль: ни document, ни chrome, ни сети.
 
 (function (root, factory) {
-  const api = factory(root.ReelboxExtract || (typeof require === 'function' ? require('./extract.js') : null));
-  root.ReelboxCache = api;
+  const api = factory(root.StashExtract || (typeof require === 'function' ? require('./extract.js') : null));
+  root.StashCache = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (extract) {
   function isObject(value) {
@@ -1063,7 +1063,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 - [ ] **Step 5: Проверить, что расширение грузится**
 
-Открыть `chrome://extensions`, нажать «Обновить» на карточке Reelbox. Ошибок в service worker быть не должно. Функциональной проверки на этом шаге нет: `content.js` ещё шлёт старую форму сообщения и сохранение временно сломано — это чинится в Task 8.
+Открыть `chrome://extensions`, нажать «Обновить» на карточке Stash. Ошибок в service worker быть не должно. Функциональной проверки на этом шаге нет: `content.js` ещё шлёт старую форму сообщения и сохранение временно сломано — это чинится в Task 8.
 
 - [ ] **Step 6: Закоммитить**
 
@@ -1081,8 +1081,8 @@ git commit -m "feat: загрузка по типу слайда и пакето
 - Modify: `manifest.json`
 
 **Interfaces:**
-- Consumes: `ReelboxCache` из Task 4, `codeFromPath` и `mediaKeyFromUrl` из `ReelboxExtract`
-- Produces: `ReelboxTarget.create(cache) → target`
+- Consumes: `StashCache` из Task 4, `codeFromPath` и `mediaKeyFromUrl` из `StashExtract`
+- Produces: `StashTarget.create(cache) → target`
   - `target.current() → { element, post, slide, guessed } | null`
   - `target.setHovered(element)` — вызывается из `content.js` по `mouseover`
   - `guessed: true` означает, что слайд не сопоставился и взят первый
@@ -1098,7 +1098,7 @@ git commit -m "feat: загрузка по типу слайда и пакето
 // Единственный файл, который знает про вёрстку Instagram.
 
 (function (root) {
-  const extract = root.ReelboxExtract;
+  const extract = root.StashExtract;
   if (!extract) return;
 
   // Порог отсекает аватарки: в шапке профиля на десктопе они 150 CSS-пикселей.
@@ -1220,7 +1220,7 @@ git commit -m "feat: загрузка по типу слайда и пакето
     };
   }
 
-  root.ReelboxTarget = { create, isPostImage, isPostVideo, visibleBox };
+  root.StashTarget = { create, isPostImage, isPostVideo, visibleBox };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 ```
 
@@ -1237,7 +1237,7 @@ git commit -m "feat: загрузка по типу слайда и пакето
 Run: `npm test`
 Expected: PASS — тесты не затронуты.
 
-Обновить расширение на `chrome://extensions`, открыть любой пост Instagram, в консоли страницы выполнить `typeof ReelboxTarget`.
+Обновить расширение на `chrome://extensions`, открыть любой пост Instagram, в консоли страницы выполнить `typeof StashTarget`.
 Expected: `"object"`.
 
 - [ ] **Step 4: Закоммитить**
@@ -1257,7 +1257,7 @@ git commit -m "feat: определение цели на экране и ном
 
 **Interfaces:**
 - Consumes: ничего
-- Produces: `ReelboxUI.create({ onSaveOne, onSaveAll }) → ui`
+- Produces: `StashUI.create({ onSaveOne, onSaveAll }) → ui`
   - `ui.setVisible(boolean)`
   - `ui.setAllCount(number)` — `0` или `1` прячет вторую кнопку
   - `ui.setState('idle'|'busy'|'done'|'error')`
@@ -1273,7 +1273,7 @@ git commit -m "feat: определение цели на экране и ном
 ```js
 'use strict';
 
-// Весь видимый интерфейс Reelbox. Живёт в Shadow DOM, чтобы стили Instagram
+// Весь видимый интерфейс Stash. Живёт в Shadow DOM, чтобы стили Instagram
 // до него не дотягивались, а его стили не протекали на страницу.
 
 (function (root) {
@@ -1281,7 +1281,7 @@ git commit -m "feat: определение цели на экране и ном
 
   function create(handlers) {
     const host = document.createElement('div');
-    host.id = 'reelbox-host';
+    host.id = 'stash-host';
     const shadow = host.attachShadow({ mode: 'open' });
 
     shadow.innerHTML = `
@@ -1438,7 +1438,7 @@ git commit -m "feat: определение цели на экране и ном
     };
   }
 
-  root.ReelboxUI = { create };
+  root.StashUI = { create };
 })(typeof globalThis !== 'undefined' ? globalThis : this);
 ```
 
@@ -1450,7 +1450,7 @@ git commit -m "feat: определение цели на экране и ном
 
 - [ ] **Step 3: Проверить загрузку**
 
-Обновить расширение, открыть Instagram, в консоли выполнить `typeof ReelboxUI`.
+Обновить расширение, открыть Instagram, в консоли выполнить `typeof StashUI`.
 Expected: `"object"`. Кнопки на экране пока не появляются: их показывает `content.js`, который ещё не переписан.
 
 - [ ] **Step 4: Закоммитить**
@@ -1481,13 +1481,13 @@ git commit -m "feat: интерфейс с кнопкой карусели и р
 // Вёрстка Instagram живёт в target.js, интерфейс в ui.js, разбор в lib/.
 
 (function () {
-  const extract = globalThis.ReelboxExtract;
-  const cacheModule = globalThis.ReelboxCache;
-  const targetModule = globalThis.ReelboxTarget;
-  const uiModule = globalThis.ReelboxUI;
+  const extract = globalThis.StashExtract;
+  const cacheModule = globalThis.StashCache;
+  const targetModule = globalThis.StashTarget;
+  const uiModule = globalThis.StashUI;
   if (!extract || !cacheModule || !targetModule || !uiModule) return;
-  if (window.__reelboxContentReady) return;
-  window.__reelboxContentReady = true;
+  if (window.__stashContentReady) return;
+  window.__stashContentReady = true;
 
   const MAX_INLINE_JSON = 3 * 1024 * 1024;
   const POLL_INTERVAL = 700;
@@ -1499,14 +1499,14 @@ git commit -m "feat: интерфейс с кнопкой карусели и р
 
   function debugEnabled() {
     try {
-      return localStorage.getItem('reelboxDebug') === '1';
+      return localStorage.getItem('stashDebug') === '1';
     } catch (error) {
       return false;
     }
   }
 
   function log(...args) {
-    if (debugEnabled()) console.log('[reelbox]', ...args);
+    if (debugEnabled()) console.log('[stash]', ...args);
   }
 
   // --- приём данных --------------------------------------------------------
@@ -1514,7 +1514,7 @@ git commit -m "feat: интерфейс с кнопкой карусели и р
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
     const data = event.data;
-    if (!data || data.source !== 'reelbox' || data.kind !== 'media') return;
+    if (!data || data.source !== 'stash' || data.kind !== 'media') return;
     cache.ingest(data.items);
   });
 
@@ -1725,7 +1725,7 @@ Expected: PASS
 5. Reels: работает как раньше, файл в `Reels`, повторное нажатие говорит «уже сохранён».
 6. Повторное нажатие на уже сохранённом слайде: `Этот кадр уже сохранён`.
 
-При расхождении включить `localStorage.reelboxDebug = '1'` и смотреть, что печатает консоль. Чинить `src/lib/extract.js`.
+При расхождении включить `localStorage.stashDebug = '1'` и смотреть, что печатает консоль. Чинить `src/lib/extract.js`.
 
 - [ ] **Step 5: Обновить README**
 
@@ -1761,7 +1761,7 @@ git commit -m "feat: сохранение картинок и каруселей
 - Modify: `src/content.js`
 
 **Interfaces:**
-- Consumes: `ReelboxUI.highlight` из Task 7, `ReelboxTarget.visibleBox` из Task 6
+- Consumes: `StashUI.highlight` из Task 7, `StashTarget.visibleBox` из Task 6
 - Produces: `target.current()` учитывает наведение и возвращает то же, что раньше
 
 - [ ] **Step 1: Учесть наведение в `current()`**
@@ -1835,7 +1835,7 @@ git commit -m "feat: липкая цель по наведению и рамка
 
 - [ ] **Step 1: Снять живые данные**
 
-Открыть чьи-нибудь сторис с картинкой. В консоли страницы выполнить `localStorage.reelboxDebug = '1'` и перелистнуть кадр, чтобы пришёл свежий ответ. Посмотреть, что печатает перехватчик.
+Открыть чьи-нибудь сторис с картинкой. В консоли страницы выполнить `localStorage.stashDebug = '1'` и перелистнуть кадр, чтобы пришёл свежий ответ. Посмотреть, что печатает перехватчик.
 
 Ожидание: в списке появляются посты с `pk`, `slides` длины 1 и `kind: 'image'`.
 
@@ -1855,19 +1855,19 @@ git commit -m "feat: липкая цель по наведению и рамка
 
 В README в разделе «Как пользоваться» добавить строку о том, что сторис сохраняются так же, как посты, и ложатся в те же папки.
 
-Дописать в спеку [../specs/2026-08-03-reelbox-images-design.md](../specs/2026-08-03-reelbox-images-design.md) раздел «Живая проверка» с датой и результатом: что подтвердилось, что пришлось править.
+Дописать в спеку [../specs/2026-08-03-stash-images-design.md](../specs/2026-08-03-stash-images-design.md) раздел «Живая проверка» с датой и результатом: что подтвердилось, что пришлось править.
 
 - [ ] **Step 5: Закоммитить**
 
 ```bash
-git add README.md docs/superpowers/specs/2026-08-03-reelbox-images-design.md
+git add README.md docs/superpowers/specs/2026-08-03-stash-images-design.md
 git commit -m "docs: сторис проверены живьём"
 ```
 
 Если правился код:
 
 ```bash
-git add src/lib/extract.js tests/extract.test.js README.md docs/superpowers/specs/2026-08-03-reelbox-images-design.md
+git add src/lib/extract.js tests/extract.test.js README.md docs/superpowers/specs/2026-08-03-stash-images-design.md
 git commit -m "fix: разбор кадров сторис"
 ```
 
@@ -2046,7 +2046,7 @@ git commit -m "feat: адрес звуковой дорожки из данны�
 
 **Interfaces:**
 - Consumes: ничего
-- Produces: `ReelboxMp4Audio`
+- Produces: `StashMp4Audio`
   - `readBoxes(bytes, start, end) → Array<{ type, start, end, contentStart }>`
   - `findBox(bytes, path, start, end) → { contentStart, end }|null` — путь вида `['moov','trak']`
   - `extractAudio(buffer) → Uint8Array` — готовый m4a
@@ -2314,7 +2314,7 @@ Expected: PASS
         if (!source) throw new Error('Источник не найден');
         const response = await fetch(source.url, { credentials: 'omit' });
         if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
-        const bytes = globalThis.ReelboxMp4Audio.extractAudio(await response.arrayBuffer());
+        const bytes = globalThis.StashMp4Audio.extractAudio(await response.arrayBuffer());
         item = {
           url: toDataUrl(bytes, 'audio/mp4'),
           filename: audioName(found.post, found.slide, 'x.m4a'),

@@ -9,7 +9,7 @@
 
 (function (root, factory) {
   const api = factory();
-  root.ReelboxMp4Audio = api;
+  root.StashMp4Audio = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   const HEADER = 8;

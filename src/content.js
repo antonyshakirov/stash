@@ -4,13 +4,13 @@
 // Вёрстка Instagram живёт в target.js, интерфейс в ui.js, разбор в lib/.
 
 (function () {
-  const extract = globalThis.ReelboxExtract;
-  const cacheModule = globalThis.ReelboxCache;
-  const targetModule = globalThis.ReelboxTarget;
-  const uiModule = globalThis.ReelboxUI;
+  const extract = globalThis.StashExtract;
+  const cacheModule = globalThis.StashCache;
+  const targetModule = globalThis.StashTarget;
+  const uiModule = globalThis.StashUI;
   if (!extract || !cacheModule || !targetModule || !uiModule) return;
-  if (window.__reelboxContentReady) return;
-  window.__reelboxContentReady = true;
+  if (window.__stashContentReady) return;
+  window.__stashContentReady = true;
 
   const MAX_INLINE_JSON = 3 * 1024 * 1024;
   const POLL_INTERVAL = 700;
@@ -22,14 +22,14 @@
 
   function debugEnabled() {
     try {
-      return localStorage.getItem('reelboxDebug') === '1';
+      return localStorage.getItem('stashDebug') === '1';
     } catch (error) {
       return false;
     }
   }
 
   function log(...args) {
-    if (debugEnabled()) console.log('[reelbox]', ...args);
+    if (debugEnabled()) console.log('[stash]', ...args);
   }
 
   // После обновления расширения старый контент-скрипт остаётся в открытой
@@ -56,7 +56,7 @@
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
     const data = event.data;
-    if (!data || data.source !== 'reelbox' || data.kind !== 'media') return;
+    if (!data || data.source !== 'stash' || data.kind !== 'media') return;
     cache.ingest(data.items);
   });
 
@@ -254,12 +254,12 @@
         // а у лицензированной музыки там ещё и отрывок вместо всей дорожки.
         path = 'разбор ролика';
         ui.say('Вынимаю звук из ролика…');
-        bytes = globalThis.ReelboxMp4Audio.extractAudio(await fetchBytes(video.url));
+        bytes = globalThis.StashMp4Audio.extractAudio(await fetchBytes(video.url));
       } else {
         // Фотопост с прикреплённой музыкой: ролика нет, вынимать не из чего.
         const buffer = await fetchBytes(direct);
         try {
-          bytes = globalThis.ReelboxMp4Audio.extractAudio(buffer);
+          bytes = globalThis.StashMp4Audio.extractAudio(buffer);
           path = 'разбор дорожки по прямому адресу';
         } catch (error) {
           path = `прямой адрес как есть (разбор не прошёл: ${error.message})`;

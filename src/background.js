@@ -1,6 +1,6 @@
 'use strict';
 
-// Service worker: единственное место, где Reelbox трогает загрузки и хранилище.
+// Service worker: единственное место, где Stash трогает загрузки и хранилище.
 
 const SAVED_KEY = 'saved';
 
@@ -106,6 +106,6 @@ chrome.action.onClicked.addListener(async (tab) => {
   try {
     await chrome.tabs.sendMessage(tab.id, { kind: 'download-current' });
   } catch (error) {
-    console.warn('[reelbox] вкладка не отвечает, обнови страницу Instagram');
+    console.warn('[stash] вкладка не отвечает, обнови страницу Instagram');
   }
 });

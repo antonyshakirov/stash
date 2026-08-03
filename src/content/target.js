@@ -4,7 +4,7 @@
 // Единственный файл, который знает про вёрстку Instagram.
 
 (function (root) {
-  const extract = root.ReelboxExtract;
+  const extract = root.StashExtract;
   if (!extract) return;
 
   // Порог отсекает аватарки: в шапке профиля на десктопе они 150 CSS-пикселей.
@@ -135,5 +135,5 @@
     };
   }
 
-  root.ReelboxTarget = { create };
+  root.StashTarget = { create };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

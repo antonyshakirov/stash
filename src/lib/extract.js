@@ -1,12 +1,12 @@
 'use strict';
 
-// Чистое ядро Reelbox: разбор данных Instagram без единого обращения к браузеру.
+// Чистое ядро Stash: разбор данных Instagram без единого обращения к браузеру.
 // Один и тот же файл грузится в контекст страницы, в контент-скрипт и в тесты,
 // поэтому наружу он отдаётся и через globalThis, и через module.exports.
 
 (function (root, factory) {
   const api = factory();
-  root.ReelboxExtract = api;
+  root.StashExtract = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   // Потолок обхода: живые ответы Instagram огромны, а зациклиться на них нельзя.

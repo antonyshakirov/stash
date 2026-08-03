@@ -1,6 +1,6 @@
 'use strict';
 
-// Весь видимый интерфейс Reelbox. Живёт в Shadow DOM, чтобы стили Instagram
+// Весь видимый интерфейс Stash. Живёт в Shadow DOM, чтобы стили Instagram
 // до него не дотягивались, а его стили не протекали на страницу.
 
 (function (root) {
@@ -85,7 +85,7 @@
 
   function create(handlers) {
     const host = document.createElement('div');
-    host.id = 'reelbox-host';
+    host.id = 'stash-host';
     const shadow = host.attachShadow({ mode: 'open' });
 
     shadow.innerHTML = `
@@ -104,19 +104,17 @@
         }
         .wrap[hidden] { display: none; }
         .row { display: flex; align-items: center; gap: 8px; }
-        /* Под панель «Messages»: тот же тёмный тон, без обводки, и наведение
-           подсветкой, а не увеличением. Instagram ничего не масштабирует при
-           наведении, поэтому scale выглядел бы здесь чужеродно. */
-        /* Фон и подсветка берутся с самой панели «Messages», см. applySurface.
-           Значения ниже — только на случай, если панели на странице нет.
-           Наведение — накладка поверх фона, а не другой цвет: так оно
-           одинаково уместно и в тёмной теме, и в светлой. */
+        /* Фон и подсветка берутся с самой панели площадки, см. applySurface;
+           значения ниже — только на случай, если панели на странице нет.
+           Наведение сделано накладкой поверх фона, а не другим цветом: так
+           оно уместно и в тёмной теме, и в светлой. Масштабирования нет —
+           площадки при наведении ничего не увеличивают. */
         .btn {
           width: 44px;
           height: 44px;
           border-radius: 50%;
           border: 0;
-          background: var(--reelbox-surface, rgba(38, 38, 38, 0.92));
+          background: var(--stash-surface, rgba(38, 38, 38, 0.92));
           backdrop-filter: blur(12px);
           color: #fff;
           display: grid;
@@ -127,8 +125,8 @@
           font-weight: 600;
           transition: box-shadow 150ms ease, opacity 150ms ease;
         }
-        .btn:hover { box-shadow: inset 0 0 0 999px var(--reelbox-overlay, rgba(255, 255, 255, 0.08)); }
-        .btn:active { box-shadow: inset 0 0 0 999px var(--reelbox-overlay-strong, rgba(255, 255, 255, 0.16)); }
+        .btn:hover { box-shadow: inset 0 0 0 999px var(--stash-overlay, rgba(255, 255, 255, 0.08)); }
+        .btn:active { box-shadow: inset 0 0 0 999px var(--stash-overlay-strong, rgba(255, 255, 255, 0.16)); }
         /* Обводка внутрь: снаружи она наползала на панель «Messages». */
         .btn:focus-visible { outline: 2px solid currentColor; outline-offset: -3px; }
         .btn[hidden] { display: none; }
@@ -233,9 +231,9 @@
       const rgb = parseRgb(color);
       if (!rgb) return;
       const light = 0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2] > 140;
-      wrap.style.setProperty('--reelbox-surface', color);
-      wrap.style.setProperty('--reelbox-overlay', light ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)');
-      wrap.style.setProperty('--reelbox-overlay-strong', light ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.16)');
+      wrap.style.setProperty('--stash-surface', color);
+      wrap.style.setProperty('--stash-overlay', light ? 'rgba(0, 0, 0, 0.06)' : 'rgba(255, 255, 255, 0.08)');
+      wrap.style.setProperty('--stash-overlay-strong', light ? 'rgba(0, 0, 0, 0.12)' : 'rgba(255, 255, 255, 0.16)');
     }
 
     function align() {
@@ -276,5 +274,5 @@
     };
   }
 
-  root.ReelboxUI = { create };
+  root.StashUI = { create };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

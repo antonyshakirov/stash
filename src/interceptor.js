@@ -9,16 +9,16 @@
 // что вернули бы без нас.
 
 (function () {
-  const extract = globalThis.ReelboxExtract;
+  const extract = globalThis.StashExtract;
   if (!extract) return;
-  if (globalThis.__reelboxInterceptorReady) return;
-  globalThis.__reelboxInterceptorReady = true;
+  if (globalThis.__stashInterceptorReady) return;
+  globalThis.__stashInterceptorReady = true;
 
   const MAX_BODY = 6 * 1024 * 1024;
 
   function debugEnabled() {
     try {
-      return localStorage.getItem('reelboxDebug') === '1';
+      return localStorage.getItem('stashDebug') === '1';
     } catch (error) {
       return false;
     }
@@ -27,8 +27,8 @@
   function publish(items) {
     if (!items || !items.length) return;
     try {
-      window.postMessage({ source: 'reelbox', kind: 'media', items }, window.location.origin);
-      if (debugEnabled()) console.log('[reelbox] перехвачено медиа:', items.length, items);
+      window.postMessage({ source: 'stash', kind: 'media', items }, window.location.origin);
+      if (debugEnabled()) console.log('[stash] перехвачено медиа:', items.length, items);
     } catch (error) {
       /* постинг не должен ломать страницу */
     }
@@ -81,7 +81,7 @@
 
   const originalFetch = window.fetch;
   if (typeof originalFetch === 'function') {
-    window.fetch = function reelboxFetch(...args) {
+    window.fetch = function stashFetch(...args) {
       const promise = originalFetch.apply(this, args);
       promise
         .then((response) => {
@@ -101,7 +101,7 @@
   const xhrProto = window.XMLHttpRequest && window.XMLHttpRequest.prototype;
   if (xhrProto && typeof xhrProto.send === 'function') {
     const originalSend = xhrProto.send;
-    xhrProto.send = function reelboxSend(...args) {
+    xhrProto.send = function stashSend(...args) {
       try {
         this.addEventListener('load', function onLoad() {
           try {

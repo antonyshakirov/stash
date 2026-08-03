@@ -1,4 +1,4 @@
-# Reelbox
+# Stash
 
 Расширение Chrome, которое сохраняет кадры и ролики Instagram одним нажатием.
 Личный инструмент для сбора референсов.
@@ -46,7 +46,7 @@
 студийный трек. Если в ролике звучит десять секунд песни, в файле будут те же
 десять секунд.
 
-То же самое делает иконка Reelbox в панели Chrome. Это запасной путь на
+То же самое делает иконка Stash в панели Chrome. Это запасной путь на
 случай, если Instagram сменит вёрстку и кнопка перестанет отрисовываться.
 
 Повторное сохранение того же кадра не создаёт дубль: расширение помнит, что
@@ -86,7 +86,7 @@
 **Ничего не помогает** — включи отладку и посмотри консоль:
 
 ```js
-localStorage.reelboxDebug = '1'
+localStorage.stashDebug = '1'
 ```
 
 После этого расширение печатает в консоль страницы, что именно оно нашло.
@@ -95,7 +95,7 @@ localStorage.reelboxDebug = '1'
 Выключается так:
 
 ```js
-localStorage.removeItem('reelboxDebug')
+localStorage.removeItem('stashDebug')
 ```
 
 ## Устройство
@@ -121,8 +121,8 @@ localStorage.removeItem('reelboxDebug')
 
 Проектные решения и границы:
 
-- [сохранение Reels](docs/superpowers/specs/2026-08-03-reelbox-design.md)
-- [картинки и карусели](docs/superpowers/specs/2026-08-03-reelbox-images-design.md)
+- [сохранение Reels](docs/superpowers/specs/2026-08-03-stash-design.md)
+- [картинки и карусели](docs/superpowers/specs/2026-08-03-stash-images-design.md)
 
 ## Тесты
 

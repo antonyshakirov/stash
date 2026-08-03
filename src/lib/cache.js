@@ -6,9 +6,9 @@
 // Чистый модуль: ни document, ни chrome, ни сети.
 
 (function (root, factory) {
-  const extract = root.ReelboxExtract || (typeof require === 'function' ? require('./extract.js') : null);
+  const extract = root.StashExtract || (typeof require === 'function' ? require('./extract.js') : null);
   const api = factory(extract);
-  root.ReelboxCache = api;
+  root.StashCache = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function (extract) {
   function isObject(value) {

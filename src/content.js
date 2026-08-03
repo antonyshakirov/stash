@@ -151,11 +151,17 @@
 
     const picked = site.choose(streamState);
     const best = picked.progressive || picked.video;
+
+    // Ответ плеера мог и не попасться: тогда автора и дату берём из разметки.
+    const known = streamState.identity && streamState.identity.username
+      ? streamState.identity
+      : (site.readDomIdentity ? site.readDomIdentity(document) : {});
+
     const base = {
       code,
       pk: code,
-      username: streamState.identity.username || null,
-      takenAt: streamState.identity.takenAt || null,
+      username: known.username || null,
+      takenAt: known.takenAt || null,
       picked
     };
 

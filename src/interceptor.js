@@ -15,6 +15,8 @@
 
   const site = sites.pick(location.hostname);
   if (!site) return;
+
+  if (debugEnabled()) console.log('[stash] перехватчик готов, площадка:', site.id);
   if (globalThis.__stashInterceptorReady) return;
   globalThis.__stashInterceptorReady = true;
 
@@ -27,6 +29,7 @@
       return false;
     }
   }
+
 
   function publish(items) {
     if (!items || !items.length) return;
@@ -67,16 +70,47 @@
   // Площадки вроде YouTube не отдают готовых ссылок на файлы: плеер сам
   // подписывает адреса потоков и запрашивает по ним куски. Мы эти адреса
   // замечаем — ничего не расшифровывая, просто читая то, что уже произошло.
+  const seenStreams = new Set();
+
   function noticeRequest(input) {
     if (!site.streamFromUrl) return;
     try {
       const url = typeof input === 'string' ? input : (input && input.url);
       const stream = site.streamFromUrl(url);
-      if (!stream) return;
+      if (!stream || seenStreams.has(stream.url)) return;
+      seenStreams.add(stream.url);
       window.postMessage({ source: 'stash', kind: 'stream', stream }, window.location.origin);
+      if (debugEnabled()) console.log('[stash] замечен поток', stream.itag, stream.kind);
     } catch (error) {
       /* чужой запрос не повод падать */
     }
+  }
+
+  /**
+   * Второй, независимый источник адресов. Обёртки над fetch и XHR ловят не
+   * всё: страница может ходить в сеть и другими путями. Браузер при этом
+   * ведёт список всех загруженных ресурсов, и там лежат те же адреса.
+   */
+  function scanPerformance() {
+    if (!site.streamFromUrl || typeof performance === 'undefined') return;
+    try {
+      for (const entry of performance.getEntriesByType('resource')) {
+        noticeRequest(entry.name);
+      }
+    } catch (error) {
+      /* список ресурсов недоступен, остаются обёртки */
+    }
+  }
+
+  if (site.streamFromUrl) {
+    try {
+      // Список ресурсов по умолчанию короткий, а запросов у плеера много.
+      if (performance.setResourceTimingBufferSize) performance.setResourceTimingBufferSize(1000);
+    } catch (error) {
+      /* необязательная мелочь */
+    }
+    scanPerformance();
+    setInterval(scanPerformance, 1000);
   }
 
   function noticePlayer(data) {

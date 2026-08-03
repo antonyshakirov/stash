@@ -195,6 +195,36 @@
     return null;
   }
 
+  /**
+   * Запасной источник автора и даты: микроразметка страницы. Нужен, когда
+   * ответ плеера не попался, а адреса потоков — попались.
+   */
+  function readDomIdentity(doc) {
+    const pick = (selector, attribute) => {
+      const node = doc.querySelector(selector);
+      if (!node) return null;
+      const value = attribute ? node.getAttribute(attribute) : node.textContent;
+      return value ? value.trim() : null;
+    };
+
+    const username =
+      pick('link[itemprop="name"]', 'content') ||
+      pick('meta[itemprop="author"]', 'content') ||
+      pick('ytd-channel-name a');
+
+    const date =
+      pick('meta[itemprop="datePublished"]', 'content') ||
+      pick('meta[itemprop="uploadDate"]', 'content');
+
+    const parsed = date ? Date.parse(date) : NaN;
+
+    return {
+      code: codeFromUrl(location.href),
+      username: username || null,
+      takenAt: Number.isFinite(parsed) ? Math.floor(parsed / 1000) : null
+    };
+  }
+
   function isOpen() {
     return Boolean(codeFromUrl(location.href));
   }
@@ -272,6 +302,7 @@
     usesStreams: true,
     collectFormats,
     readPlayerIdentity: readIdentity,
+    readDomIdentity,
     streamFromUrl,
     choose,
     scanInline

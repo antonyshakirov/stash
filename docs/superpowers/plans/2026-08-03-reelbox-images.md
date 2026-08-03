@@ -1870,3 +1870,503 @@ git commit -m "docs: сторис проверены живьём"
 git add src/lib/extract.js tests/extract.test.js README.md docs/superpowers/specs/2026-08-03-reelbox-images-design.md
 git commit -m "fix: разбор кадров сторис"
 ```
+
+---
+
+# Фаза 4. Звук отдельным файлом
+
+Зависит только от Task 8: нужны цель на экране и интерфейс. От фаз 2 и 3 не зависит.
+
+### Task 11: Адрес звуковой дорожки в данных
+
+**Files:**
+- Modify: `src/lib/extract.js`
+- Modify: `tests/extract.test.js`
+
+**Interfaces:**
+- Consumes: `Post` из Task 1
+- Produces:
+  - `Post.audio: { url: string, title: string|null } | null`
+  - `readAudio(node) → Post['audio']`
+
+- [ ] **Step 1: Написать падающие тесты**
+
+```js
+test('читает адрес оригинального звука', () => {
+  const payload = {
+    items: [
+      {
+        code: 'AAA',
+        user: { username: 'nike' },
+        video_versions: [{ url: 'https://cdn/v.mp4', width: 1080, height: 1920 }],
+        clips_metadata: {
+          original_sound_info: {
+            original_audio_title: 'Original audio',
+            progressive_download_url: 'https://cdn/v/sound_n.m4a?x=1'
+          }
+        }
+      }
+    ]
+  };
+  const post = extract.collectMedia(payload)[0];
+  assert.strictEqual(post.audio.url, 'https://cdn/v/sound_n.m4a?x=1');
+  assert.strictEqual(post.audio.title, 'Original audio');
+});
+
+test('читает адрес лицензированной музыки', () => {
+  const payload = {
+    items: [
+      {
+        code: 'BBB',
+        video_versions: [{ url: 'https://cdn/v.mp4', width: 1080, height: 1920 }],
+        clips_metadata: {
+          music_info: {
+            music_asset_info: {
+              title: 'Track',
+              display_artist: 'Artist',
+              progressive_download_url: 'https://cdn/v/track_n.m4a'
+            }
+          }
+        }
+      }
+    ]
+  };
+  const post = extract.collectMedia(payload)[0];
+  assert.strictEqual(post.audio.url, 'https://cdn/v/track_n.m4a');
+  assert.strictEqual(post.audio.title, 'Artist — Track');
+});
+
+test('оригинальный звук предпочитается музыке', () => {
+  const payload = {
+    items: [
+      {
+        code: 'CCC',
+        video_versions: [{ url: 'https://cdn/v.mp4', width: 1080, height: 1920 }],
+        clips_metadata: {
+          original_sound_info: { progressive_download_url: 'https://cdn/v/own_n.m4a' },
+          music_info: { music_asset_info: { progressive_download_url: 'https://cdn/v/track_n.m4a' } }
+        }
+      }
+    ]
+  };
+  assert.strictEqual(extract.collectMedia(payload)[0].audio.url, 'https://cdn/v/own_n.m4a');
+});
+
+test('без метаданных звука поле пустое', () => {
+  const posts = extract.collectMedia(sampleResponse());
+  assert.strictEqual(posts[0].audio, null);
+});
+
+test('слияние постов сохраняет найденный звук', () => {
+  const withAudio = { code: 'AAA', pk: null, username: null, takenAt: null, audio: { url: 'https://cdn/a.m4a', title: null }, slides: [{ index: 1, kind: 'video', sources: [{ url: 'https://cdn/v.mp4', width: 1, height: 1 }] }] };
+  const without = { code: 'AAA', pk: null, username: 'nike', takenAt: 1, audio: null, slides: [{ index: 1, kind: 'video', sources: [{ url: 'https://cdn/v.mp4', width: 1, height: 1 }] }] };
+  assert.strictEqual(extract.mergePosts(without, withAudio).audio.url, 'https://cdn/a.m4a');
+  assert.strictEqual(extract.mergePosts(withAudio, without).audio.url, 'https://cdn/a.m4a');
+});
+```
+
+- [ ] **Step 2: Убедиться, что тесты падают**
+
+Run: `npm test`
+Expected: FAIL — `post.audio` не определено.
+
+- [ ] **Step 3: Реализовать**
+
+В `src/lib/extract.js` рядом с `readImages`:
+
+```js
+  function audioTitle(info) {
+    const artist = firstString(info, ['display_artist', 'artist_name']);
+    const title = firstString(info, ['original_audio_title', 'title', 'song_name']);
+    if (artist && title) return `${artist} — ${title}`;
+    return title || artist || null;
+  }
+
+  /**
+   * Прямой адрес звуковой дорожки, если Instagram его дал. Оригинальный звук
+   * предпочтительнее музыки: у лицензированной по этому адресу часто отрывок.
+   */
+  function readAudio(node) {
+    const clips = isObject(node.clips_metadata) ? node.clips_metadata : node;
+
+    const own = isObject(clips.original_sound_info) ? clips.original_sound_info : null;
+    if (own) {
+      const url = firstString(own, ['progressive_download_url']);
+      if (url) return { url, title: audioTitle(own) };
+    }
+
+    const music = isObject(clips.music_info) ? clips.music_info : null;
+    const asset = music && isObject(music.music_asset_info) ? music.music_asset_info : null;
+    if (asset) {
+      const url = firstString(asset, ['progressive_download_url']);
+      if (url) return { url, title: audioTitle(asset) };
+    }
+
+    return null;
+  }
+```
+
+В `buildPost` добавить поле:
+
+```js
+      takenAt: readTakenAt(node),
+      audio: readAudio(node),
+      slides
+```
+
+В `mergePosts` добавить строку:
+
+```js
+      takenAt: previous.takenAt || candidate.takenAt,
+      audio: previous.audio || candidate.audio,
+```
+
+Добавить `readAudio` в блок `return`.
+
+- [ ] **Step 4: Убедиться, что тесты проходят**
+
+Run: `npm test`
+Expected: PASS
+
+- [ ] **Step 5: Закоммитить**
+
+```bash
+git add src/lib/extract.js tests/extract.test.js
+git commit -m "feat: адрес звуковой дорожки из данных поста"
+```
+
+---
+
+### Task 12: Разбор mp4 и пересборка в m4a
+
+**Files:**
+- Create: `src/lib/mp4audio.js`
+- Create: `tests/mp4audio.test.js`
+- Modify: `manifest.json`
+
+**Interfaces:**
+- Consumes: ничего
+- Produces: `ReelboxMp4Audio`
+  - `readBoxes(bytes, start, end) → Array<{ type, start, end, contentStart }>`
+  - `findBox(bytes, path, start, end) → { contentStart, end }|null` — путь вида `['moov','trak']`
+  - `extractAudio(buffer) → Uint8Array` — готовый m4a
+  - При невозможности бросает `Error` с русским текстом: `в файле нет moov`, `в ролике нет звуковой дорожки`, `фрагментированный mp4 не поддерживается`, `битый контейнер`
+
+- [ ] **Step 1: Написать падающие тесты**
+
+```js
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const mp4 = require('../src/lib/mp4audio.js');
+
+const enc = new TextEncoder();
+
+// Минимальный конструктор боксов: помогает собрать проверочный mp4 руками.
+function box(type, ...parts) {
+  const payload = parts.flatMap((part) => Array.from(part));
+  const size = 8 + payload.length;
+  const head = [(size >>> 24) & 255, (size >>> 16) & 255, (size >>> 8) & 255, size & 255];
+  return Uint8Array.from([...head, ...enc.encode(type), ...payload]);
+}
+
+function u32(value) {
+  return Uint8Array.from([(value >>> 24) & 255, (value >>> 16) & 255, (value >>> 8) & 255, value & 255]);
+}
+
+function u16(value) {
+  return Uint8Array.from([(value >>> 8) & 255, value & 255]);
+}
+
+function zeros(count) {
+  return new Uint8Array(count);
+}
+
+// Два звуковых кадра по три байта, лежащих подряд в mdat.
+const FRAME_A = Uint8Array.from([0xaa, 0xbb, 0xcc]);
+const FRAME_B = Uint8Array.from([0xdd, 0xee, 0xff]);
+
+function sampleMp4() {
+  const stsd = box('stsd', u32(0), u32(1), box('mp4a', zeros(28)));
+  const stts = box('stts', u32(0), u32(1), u32(2), u32(1024));
+  const stsc = box('stsc', u32(0), u32(1), u32(1), u32(2), u32(1));
+  const stsz = box('stsz', u32(0), u32(0), u32(2), u32(FRAME_A.length), u32(FRAME_B.length));
+  const stbl = box('stbl', stsd, stts, stsc, stsz, box('stco', u32(0), u32(1), u32(0)));
+  const minf = box('minf', box('smhd', zeros(8)), stbl);
+  const hdlr = box('hdlr', u32(0), u32(0), enc.encode('soun'), zeros(12), zeros(1));
+  const mdhd = box('mdhd', u32(0), u32(0), u32(0), u32(44100), u32(2048), u16(0x55c4), u16(0));
+  const trak = box('trak', box('tkhd', zeros(84)), box('mdia', mdhd, hdlr, minf));
+  const moov = box('moov', box('mvhd', zeros(100)), trak);
+
+  const ftyp = box('ftyp', enc.encode('isom'), u32(512), enc.encode('isom'));
+  const mdat = box('mdat', FRAME_A, FRAME_B);
+
+  // Смещение кадров в готовом файле известно только сейчас: правим stco.
+  const file = Uint8Array.from([...ftyp, ...moov, ...mdat]);
+  const mdatContent = ftyp.length + moov.length + 8;
+  const stcoValue = file.indexOf(0x73) ; // не используется, смещение чинится ниже
+  void stcoValue;
+
+  // stco лежит внутри stbl: находим бокс и переписываем единственное значение.
+  const stcoBox = mp4.findBox(file, ['moov', 'trak', 'mdia', 'minf', 'stbl', 'stco']);
+  file.set(u32(mdatContent), stcoBox.contentStart + 8);
+
+  return file;
+}
+
+test('находит боксы верхнего уровня', () => {
+  const file = sampleMp4();
+  const types = mp4.readBoxes(file, 0, file.length).map((entry) => entry.type);
+  assert.deepStrictEqual(types, ['ftyp', 'moov', 'mdat']);
+});
+
+test('находит вложенный бокс по пути', () => {
+  const file = sampleMp4();
+  assert.notStrictEqual(mp4.findBox(file, ['moov', 'trak', 'mdia', 'minf', 'stbl', 'stsz']), null);
+  assert.strictEqual(mp4.findBox(file, ['moov', 'trak', 'mdia', 'minf', 'stbl', 'ctts']), null);
+});
+
+test('пересобранный m4a содержит те же кадры', () => {
+  const file = sampleMp4();
+  const result = mp4.extractAudio(file.buffer.slice(file.byteOffset, file.byteOffset + file.length));
+
+  const types = mp4.readBoxes(result, 0, result.length).map((entry) => entry.type);
+  assert.deepStrictEqual(types, ['ftyp', 'moov', 'mdat']);
+
+  const mdat = mp4.readBoxes(result, 0, result.length).find((entry) => entry.type === 'mdat');
+  const payload = result.slice(mdat.contentStart, mdat.end);
+  assert.deepStrictEqual(Array.from(payload), [...FRAME_A, ...FRAME_B]);
+});
+
+test('в пересобранном m4a одна звуковая дорожка и рабочий stco', () => {
+  const file = sampleMp4();
+  const result = mp4.extractAudio(file.buffer.slice(file.byteOffset, file.byteOffset + file.length));
+
+  const stco = mp4.findBox(result, ['moov', 'trak', 'mdia', 'minf', 'stbl', 'stco']);
+  const view = new DataView(result.buffer, result.byteOffset, result.length);
+  assert.strictEqual(view.getUint32(stco.contentStart + 4), 1);
+
+  const offset = view.getUint32(stco.contentStart + 8);
+  assert.deepStrictEqual(Array.from(result.slice(offset, offset + 3)), Array.from(FRAME_A));
+});
+
+test('ролик без звуковой дорожки даёт внятную ошибку', () => {
+  const hdlr = box('hdlr', u32(0), u32(0), enc.encode('vide'), zeros(12), zeros(1));
+  const trak = box('trak', box('mdia', hdlr));
+  const file = Uint8Array.from([...box('ftyp', enc.encode('isom')), ...box('moov', trak), ...box('mdat', FRAME_A)]);
+  assert.throws(() => mp4.extractAudio(file.buffer.slice(0, file.length)), /нет звуковой дорожки/);
+});
+
+test('файл без moov даёт внятную ошибку', () => {
+  const file = Uint8Array.from([...box('ftyp', enc.encode('isom')), ...box('mdat', FRAME_A)]);
+  assert.throws(() => mp4.extractAudio(file.buffer.slice(0, file.length)), /нет moov/);
+});
+
+test('фрагментированный контейнер отвергается', () => {
+  const hdlr = box('hdlr', u32(0), u32(0), enc.encode('soun'), zeros(12), zeros(1));
+  const trak = box('trak', box('mdia', hdlr));
+  const file = Uint8Array.from([
+    ...box('ftyp', enc.encode('isom')),
+    ...box('moov', trak),
+    ...box('moof', zeros(4)),
+    ...box('mdat', FRAME_A)
+  ]);
+  assert.throws(() => mp4.extractAudio(file.buffer.slice(0, file.length)), /фрагментированный/);
+});
+
+test('мусор вместо файла отвергается', () => {
+  assert.throws(() => mp4.extractAudio(new Uint8Array([1, 2, 3]).buffer), /битый контейнер/);
+  assert.throws(() => mp4.extractAudio(new ArrayBuffer(0)), /битый контейнер/);
+});
+```
+
+- [ ] **Step 2: Убедиться, что тесты падают**
+
+Run: `npm test`
+Expected: FAIL — `Cannot find module '../src/lib/mp4audio.js'`
+
+- [ ] **Step 3: Реализовать разбор и сборку**
+
+Модуль пишется целиком по описанию ниже. Ключевые решения зафиксированы здесь, чтобы реализация не расходилась со спекой:
+
+- обход боксов читает 32-битный размер, `size == 1` означает 64-битный `largesize`, `size == 0` означает «до конца файла»;
+- звуковая дорожка ищется как `trak`, у которого `mdia/hdlr` на смещении 8 содержит `soun`;
+- смещения кадров считаются из `stsc` + `stco`/`co64` + `stsz`: внутри чанка кадры лежат подряд;
+- `stsz` с ненулевым `sample_size` означает одинаковый размер всех кадров, это поддерживается;
+- на выходе `stsd`, `stts` и `stsz` копируются, `stsc` становится единственной записью `{1, всего кадров, 1}`, `stco` — единственным смещением начала `mdat`;
+- смещение `mdat` известно только после сборки `moov`, поэтому `moov` собирается первым, а значение `stco` подставляется в готовые байты;
+- `ftyp` пишется с major brand `M4A ` и совместимыми `M4A `, `mp42`, `isom`.
+
+- [ ] **Step 4: Убедиться, что тесты проходят**
+
+Run: `npm test`
+Expected: PASS
+
+- [ ] **Step 5: Подключить в манифест**
+
+`src/lib/mp4audio.js` добавляется во второй блок `content_scripts` после `src/lib/cache.js`. В блок `world: MAIN` не добавляется: перехватчику разбор mp4 не нужен.
+
+- [ ] **Step 6: Закоммитить**
+
+```bash
+git add src/lib/mp4audio.js tests/mp4audio.test.js manifest.json
+git commit -m "feat: разбор mp4 и пересборка звуковой дорожки в m4a"
+```
+
+---
+
+### Task 13: Кнопка звука
+
+**Files:**
+- Modify: `src/content/ui.js`, `src/content.js`, `src/lib/extract.js`
+- Modify: `README.md`
+
+**Interfaces:**
+- Consumes: `readAudio` из Task 11, `extractAudio` из Task 12, интерфейс из Task 7
+- Produces: `ui.setAudioAvailable(boolean)`, обработчик `onSaveAudio`
+
+- [ ] **Step 1: Папка для звука**
+
+В `src/lib/extract.js` расширить `folderFor` и добавить тест в `tests/extract.test.js`:
+
+```js
+  function folderFor(kind) {
+    if (kind === 'video') return 'Reels';
+    if (kind === 'audio') return 'Audio';
+    return 'Photos';
+  }
+```
+
+```js
+test('звук уходит в свою папку', () => {
+  assert.strictEqual(extract.folderFor('audio'), 'Audio');
+});
+```
+
+Run: `npm test`
+Expected: PASS
+
+- [ ] **Step 2: Третья кнопка в интерфейсе**
+
+В `src/content/ui.js` в разметку `.row` перед `.btn-all` добавить кнопку:
+
+```html
+          <button class="btn btn-audio" type="button" hidden title="Сохранить только звук">
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 18V5l10-2v13" />
+              <circle cx="6" cy="18" r="3" />
+              <circle cx="16" cy="16" r="3" />
+            </svg>
+          </button>
+```
+
+В `create` завести ссылку, подписку и метод:
+
+```js
+    const audio = shadow.querySelector('.btn-audio');
+    audio.addEventListener('click', () => handlers.onSaveAudio());
+```
+
+```js
+      setAudioAvailable(available) {
+        audio.hidden = !available;
+      },
+```
+
+- [ ] **Step 3: Сохранение звука в `src/content.js`**
+
+Добавить функцию и передать обработчик в `uiModule.create`:
+
+```js
+  function audioName(post, slide, url) {
+    const extension = extract.extensionFromUrl(url, 'audio');
+    return extract.buildFilename(post, slide).replace(/\.[^.]+$/, '') + '.' + extension;
+  }
+
+  function toDataUrl(bytes, type) {
+    let binary = '';
+    const chunk = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunk) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunk));
+    }
+    return `data:${type};base64,${btoa(binary)}`;
+  }
+
+  async function saveAudio() {
+    if (busy) return;
+    const found = target.current();
+    if (!found || !found.post || !found.slide || found.slide.kind !== 'video') return;
+
+    busy = true;
+    ui.setState('busy');
+
+    try {
+      const key = `${extract.downloadKey(found.post, found.slide)}#audio`;
+      const direct = found.post.audio && found.post.audio.url;
+
+      let item;
+      if (direct) {
+        item = { url: direct, filename: audioName(found.post, found.slide, direct), folder: 'Audio', key };
+      } else {
+        const source = extract.bestSource(found.slide.sources);
+        if (!source) throw new Error('Источник не найден');
+        const response = await fetch(source.url, { credentials: 'omit' });
+        if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
+        const bytes = globalThis.ReelboxMp4Audio.extractAudio(await response.arrayBuffer());
+        item = {
+          url: toDataUrl(bytes, 'audio/mp4'),
+          filename: audioName(found.post, found.slide, 'x.m4a'),
+          folder: 'Audio',
+          key
+        };
+      }
+
+      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item });
+      if (result && result.ok) {
+        ui.setState('done');
+        ui.say(`Сохранено: Загрузки/Audio/${result.filename}`);
+      } else if (result && result.duplicate) {
+        ui.setState('done');
+        ui.say('Этот звук уже сохранён');
+      } else {
+        throw new Error((result && result.error) || 'загрузка не началась');
+      }
+    } catch (error) {
+      ui.setState('error');
+      ui.say(`Звук не сохранён: ${String((error && error.message) || error)}`);
+    } finally {
+      busy = false;
+    }
+  }
+```
+
+Передать в создание интерфейса:
+
+```js
+  const ui = uiModule.create({ onSaveOne: saveOne, onSaveAll: saveAll, onSaveAudio: saveAudio });
+```
+
+В теле `setInterval` добавить строку:
+
+```js
+    ui.setAudioAvailable(Boolean(found && found.slide && found.slide.kind === 'video'));
+```
+
+- [ ] **Step 4: Живой прогон звука**
+
+1. Reels с оригинальным звуком: кнопка ноты сохраняет файл в `Загрузки/Audio`.
+2. Reels с лицензированной музыкой: файл сохраняется, длительность может быть меньше ролика.
+3. Ролик, у которого прямого адреса нет: звук всё равно достаётся, файл открывается в проигрывателе.
+4. Пост с картинкой: кнопки ноты нет.
+5. Повторное нажатие: `Этот звук уже сохранён`.
+
+- [ ] **Step 5: Дописать README и закоммитить**
+
+В README в «Как пользоваться» добавить кнопку звука и папку `Загрузки/Audio`, в «Устройство» — строку про `src/lib/mp4audio.js`.
+
+```bash
+git add src/lib/extract.js src/content/ui.js src/content.js tests/extract.test.js README.md
+git commit -m "feat: кнопка сохранения звука отдельным файлом"
+```

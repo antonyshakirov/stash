@@ -295,6 +295,59 @@
     );
   }
 
+  // Адреса потоков YouTube рассчитаны на выдачу кусками: именно так их
+  // запрашивает плеер, и запрос файла целиком сервер отклоняет. Забираем так
+  // же, кусками, и склеиваем.
+  const RANGE_CHUNK = 8 * 1024 * 1024;
+
+  function streamShape(entry) {
+    try {
+      return Array.from(new URL(entry.url).searchParams.keys()).join(',');
+    } catch (error) {
+      return 'адрес не разобрался';
+    }
+  }
+
+  async function fetchRange(url, from, to) {
+    const target = new URL(url);
+    target.searchParams.set('range', `${from}-${to}`);
+
+    let response = await fetch(target.toString(), { credentials: 'omit' });
+    // Часть адресов отвечает только запросу с куками страницы.
+    if (response.status === 403) {
+      response = await fetch(target.toString(), { credentials: 'include' });
+    }
+    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
+
+    return new Uint8Array(await response.arrayBuffer());
+  }
+
+  async function fetchStream(entry, label) {
+    log('поток', entry.itag, '| размер', entry.size, '| параметры адреса:', streamShape(entry));
+
+    const total = Number(entry.size) || 0;
+    if (!total) return new Uint8Array(await fetchBytes(entry.url));
+
+    const parts = [];
+    let at = 0;
+
+    while (at < total) {
+      const part = await fetchRange(entry.url, at, Math.min(at + RANGE_CHUNK, total) - 1);
+      if (!part.length) break;
+      parts.push(part);
+      at += part.length;
+      ui.say(`${label}: ${Math.round((at / total) * 100)}%`);
+    }
+
+    const out = new Uint8Array(at);
+    let cursor = 0;
+    for (const part of parts) {
+      out.set(part, cursor);
+      cursor += part.length;
+    }
+    return out;
+  }
+
   // Потоки забираются в память целиком, поэтому у длинных роликов есть
   // потолок: лучше отказать заранее, чем уронить вкладку на середине.
   const MAX_STREAM_BYTES = 600 * 1024 * 1024;
@@ -330,8 +383,7 @@
 
     if (progressiveWins) {
       checkSize(picked.progressive);
-      ui.say('Качаю ролик…');
-      const bytes = new Uint8Array(await fetchBytes(picked.progressive.url));
+      const bytes = await fetchStream(picked.progressive, 'Качаю ролик');
       const said = await deliver(bytes, streamName(post, 'mp4'), 'Reels', key);
       clearForce();
       ui.setState('done');
@@ -347,8 +399,7 @@
 
     // Звука нет вовсе: сохраняем видео как есть и говорим об этом.
     if (!picked.audio) {
-      ui.say('Качаю видео, звуковой дорожки не нашлось…');
-      const bytes = new Uint8Array(await fetchBytes(picked.video.url));
+      const bytes = await fetchStream(picked.video, 'Качаю видео');
       const said = await deliver(bytes, streamName(post, streamExtension(picked.video, 'video')), 'Reels', key);
       ui.setState('done');
       ui.say(`${said} Без звука: дорожка не пришла.`);
@@ -358,9 +409,8 @@
     // Контейнеры несовместимы: сложить webm-звук в mp4 нельзя, поэтому
     // сохраняем двумя файлами, а не портим один.
     if (!isMp4Stream(picked.video) || !isMp4Stream(picked.audio)) {
-      ui.say('Качаю видео и звук…');
-      const video = new Uint8Array(await fetchBytes(picked.video.url));
-      const audio = new Uint8Array(await fetchBytes(picked.audio.url));
+      const video = await fetchStream(picked.video, 'Качаю видео');
+      const audio = await fetchStream(picked.audio, 'Качаю звук');
       await deliver(video, streamName(post, streamExtension(picked.video, 'video')), 'Reels', key);
       await deliver(audio, streamName(post, streamExtension(picked.audio, 'audio')), 'Audio', `${key}#audio`);
       ui.setState('done');
@@ -369,9 +419,8 @@
     }
 
     checkSize(picked.video, picked.audio);
-    ui.say('Качаю видео и звук…');
-    const video = await fetchBytes(picked.video.url);
-    const audio = await fetchBytes(picked.audio.url);
+    const video = await fetchStream(picked.video, 'Качаю видео');
+    const audio = await fetchStream(picked.audio, 'Качаю звук');
 
     ui.say('Собираю в один файл…');
     const bytes = globalThis.StashMp4Mux.mux(video, audio);
@@ -392,8 +441,7 @@
 
     const picked = post.picked;
 
-    ui.say('Качаю звук…');
-    const bytes = new Uint8Array(await fetchBytes(picked.audio.url));
+    const bytes = await fetchStream(picked.audio, 'Качаю звук');
     const key = `${extract.downloadKey(post, found.slide)}#audio`;
     const filename = streamName(post, streamExtension(picked.audio, 'audio'));
 

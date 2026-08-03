@@ -435,20 +435,26 @@
     return sum;
   }
 
-  function writeSamples(target, at, track) {
-    let cursor = at;
+  /**
+   * Кадры, лежащие в исходнике подряд, объединяются в один отрезок. У
+   * фрагментированного mp4 это весь фрагмент разом, поэтому отрезков выходят
+   * сотни, а не десятки тысяч.
+   */
+  function sampleRuns(track) {
+    const runs = [];
     for (const sample of track.samples) {
-      target.set(track.bytes.subarray(sample.at, sample.at + sample.size), cursor);
-      cursor += sample.size;
+      const last = runs[runs.length - 1];
+      if (last && last.at + last.size === sample.at) last.size += sample.size;
+      else runs.push({ at: sample.at, size: sample.size });
     }
-    return cursor;
+    return runs;
   }
 
   /**
    * Собирает видео и звук в один mp4. Каждая дорожка кладётся одним куском,
    * поэтому stsc и stco занимают по одной записи.
    */
-  function mux(videoInput, audioInput) {
+  function muxParts(videoInput, audioInput) {
     const video = readTrack(videoInput, 'vide');
     const audio = readTrack(audioInput, 'soun');
 
@@ -484,13 +490,27 @@
 
     if (moov.length !== draft.length) fail('не сошёлся размер moov');
 
-    const mdat = new Uint8Array(HEADER + payloadSize(video) + payloadSize(audio));
-    new DataView(mdat.buffer).setUint32(0, mdat.length);
-    mdat.set(chars('mdat'), 4);
-    writeSamples(mdat, writeSamples(mdat, HEADER, video), audio);
+    const mdatSize = HEADER + payloadSize(video) + payloadSize(audio);
+    const mdatHeader = new Uint8Array(HEADER);
+    new DataView(mdatHeader.buffer).setUint32(0, mdatSize);
+    mdatHeader.set(chars('mdat'), 4);
 
-    return join([ftyp, moov, mdat]);
+    // Отдаём отрезки исходников, а не копию: собирать гигабайт в памяти,
+    // чтобы тут же скопировать его ещё раз, ни к чему.
+    const parts = [ftyp, moov, mdatHeader];
+    for (const track of [video, audio]) {
+      for (const run of sampleRuns(track)) {
+        parts.push(track.bytes.subarray(run.at, run.at + run.size));
+      }
+    }
+
+    return parts;
   }
 
-  return { readTrack, mux };
+  /** Тот же результат одним массивом: нужен там, где кусками не обойтись. */
+  function mux(videoInput, audioInput) {
+    return join(muxParts(videoInput, audioInput));
+  }
+
+  return { readTrack, mux, muxParts };
 });

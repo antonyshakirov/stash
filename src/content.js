@@ -424,8 +424,11 @@
   // Потоки читаются в память, поэтому у длинных роликов есть потолок. Он
   // разный: сборка держит оба потока и результат сразу, а одиночный файл
   // отдаётся кусками и обходится вдвое дешевле.
-  const MUX_LIMIT = 700 * 1024 * 1024;
-  const SINGLE_LIMIT = 1500 * 1024 * 1024;
+  // Потолки высокие намеренно: часовой ролик в 1080p со звуком — обычное
+  // дело, и отказывать в нём смысла нет. Совсем без потолка нельзя: вкладка
+  // упала бы молча, а так расширение говорит, что не потянет.
+  const MUX_LIMIT = 2500 * 1024 * 1024;
+  const SINGLE_LIMIT = 2500 * 1024 * 1024;
 
   function sizeOf(...entries) {
     let total = 0;
@@ -512,14 +515,20 @@
     }
 
     if (pairSize > MUX_LIMIT) throw new Error(`сборка не влезет в память (${mb(pairSize)} МБ)`);
-    const video = await fetchStream(picked.video, 'Качаю видео');
-    const audio = await fetchStream(picked.audio, 'Качаю звук');
+
+    let video = await fetchStream(picked.video, 'Качаю видео');
+    let audio = await fetchStream(picked.audio, 'Качаю звук');
 
     ui.say('Собираю в один файл…');
-    const bytes = globalThis.StashMp4Mux.mux(video, audio);
-    log('собрано', bytes.length, 'байт из', video.byteLength, '+', audio.byteLength);
+    const parts = globalThis.StashMp4Mux.muxParts(video, audio);
+    log('собрано отрезков:', parts.length, 'из', video.length, '+', audio.length, 'байт');
 
-    const said = await deliver(bytes, streamName(post, 'mp4'), 'Reels', key);
+    // Отрезки ссылаются на исходники, поэтому освобождать их нельзя до
+    // записи файла. Отпускаем ссылки сразу после неё.
+    const said = await deliverParts(parts, streamName(post, 'mp4'), 'Reels', key);
+    video = null;
+    audio = null;
+
     clearForce();
     ui.setState('done');
     ui.say(said);

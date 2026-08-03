@@ -3,7 +3,6 @@
 // Service worker: единственное место, где Reelbox трогает загрузки и хранилище.
 
 const SAVED_KEY = 'saved';
-const BATCH_GAP = 150;
 
 // downloadId -> откуда пришла загрузка, чтобы сообщить вкладке о срыве.
 const inFlight = new Map();
@@ -52,44 +51,10 @@ async function startDownload(item, sender) {
   }
 }
 
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-// Пауза между файлами: залп из двадцати запросов Chrome переваривает плохо,
-// а карусель длиннее двадцати слайдов не бывает.
-async function startBatch(items, sender) {
-  const report = { saved: 0, skipped: 0, failed: 0, firstError: null };
-  if (!Array.isArray(items) || !items.length) return report;
-
-  for (let i = 0; i < items.length; i += 1) {
-    const result = await startDownload(items[i], sender);
-    if (result.ok) report.saved += 1;
-    else if (result.duplicate) report.skipped += 1;
-    else {
-      report.failed += 1;
-      if (!report.firstError) report.firstError = result.error || 'загрузка не началась';
-    }
-    if (i < items.length - 1) await wait(BATCH_GAP);
-  }
-
-  return report;
-}
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message) return undefined;
-
-  if (message.kind === 'download') {
-    startDownload(message, sender).then(sendResponse);
-    return true;
-  }
-
-  if (message.kind === 'download-batch') {
-    startBatch(message.items, sender).then(sendResponse);
-    return true;
-  }
-
-  return undefined;
+  if (!message || message.kind !== 'download') return undefined;
+  startDownload(message, sender).then(sendResponse);
+  return true;
 });
 
 // Загрузка могла стартовать и умереть позже: тогда снимаем отметку

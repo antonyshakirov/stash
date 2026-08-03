@@ -140,37 +140,6 @@
     }
   }
 
-  async function saveAll() {
-    if (busy) return;
-    const found = target.current();
-    if (!found || !found.post || found.post.slides.length < 2) return;
-
-    const items = found.post.slides.map((slide) => describe(found.post, slide)).filter(Boolean);
-    if (!items.length) {
-      ui.setState('error');
-      ui.say('Источник не найден. Обнови страницу и попробуй снова.');
-      return;
-    }
-
-    busy = true;
-    ui.setState('busy');
-    log('сохраняю пакет', items.length);
-
-    try {
-      const report = await chrome.runtime.sendMessage({ kind: 'download-batch', items });
-      const parts = [`Сохранено ${report.saved}`];
-      if (report.skipped) parts.push(`пропущено ${report.skipped} (уже есть)`);
-      if (report.failed) parts.push(`не удалось ${report.failed}: ${report.firstError}`);
-      ui.setState(report.failed ? 'error' : 'done');
-      ui.say(parts.join(', '));
-    } catch (error) {
-      ui.setState('error');
-      ui.say(`Не получилось: ${String((error && error.message) || error)}`);
-    } finally {
-      busy = false;
-    }
-  }
-
   function audioName(post, slide, url) {
     const extension = extract.extensionFromUrl(url, 'audio');
     return extract.buildFilename(post, slide).replace(/\.[^.]+$/, '') + '.' + extension;
@@ -188,10 +157,17 @@
     return `data:${type};base64,${btoa(binary)}`;
   }
 
+  // Звук есть у ролика, а ещё у фотопоста, к которому прикреплена музыка.
+  function hasAudio(found) {
+    if (!found || !found.post || !found.slide) return false;
+    if (found.post.audio && found.post.audio.url) return true;
+    return found.slide.kind === 'video';
+  }
+
   async function saveAudio() {
     if (busy) return;
     const found = target.current();
-    if (!found || !found.post || !found.slide || found.slide.kind !== 'video') return;
+    if (!hasAudio(found)) return;
 
     busy = true;
     ui.setState('busy');
@@ -249,7 +225,7 @@
     }
   }
 
-  const ui = uiModule.create({ onSaveOne: saveOne, onSaveAll: saveAll, onSaveAudio: saveAudio });
+  const ui = uiModule.create({ onSaveOne: saveOne, onSaveAudio: saveAudio });
 
   chrome.runtime.onMessage.addListener((message) => {
     if (!message) return;
@@ -273,19 +249,19 @@
     }
   });
 
-  document.addEventListener('mouseover', (event) => target.setHovered(event.target), true);
-
   // --- жизненный цикл ------------------------------------------------------
 
   // Instagram меняет адрес прокруткой ленты, события об этом нет,
   // поэтому просто смотрим на состояние страницы раз в POLL_INTERVAL.
   let lastHref = '';
   setInterval(() => {
+    // Во время сохранения состояние кнопок не трогаем: иначе крутилка
+    // моргала бы раз в POLL_INTERVAL.
+    if (busy) return;
+
     const found = target.current();
     ui.setVisible(Boolean(found));
-    ui.setAllCount(found && found.post ? found.post.slides.length : 0);
-    ui.setAudioAvailable(Boolean(found && found.slide && found.slide.kind === 'video'));
-    ui.highlight(found ? found.element.getBoundingClientRect() : null);
+    ui.setAudioAvailable(hasAudio(found));
     if (location.href !== lastHref) {
       lastHref = location.href;
       ui.resetTransient();

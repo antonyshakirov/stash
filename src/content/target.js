@@ -41,11 +41,25 @@
     return Math.min(seen.width, seen.height) >= MIN_SIDE;
   }
 
+  /**
+   * Сохранение работает только на открытом посте. В ленте и в сетке профиля
+   * кнопки нет намеренно: там под курсором миниатюра, из неё вышел бы файл
+   * хуже оригинала, а какой именно пост имеется в виду — вопрос догадки.
+   *
+   * Открытый пост опознаётся по адресу: Instagram ставит /p/<код>/ и когда
+   * пост распахнут модальным окном поверх ленты или профиля.
+   */
+  function postIsOpen(element) {
+    if (extract.codeFromPath(location.pathname)) return true;
+    return Boolean(element.closest && element.closest('div[role="dialog"]'));
+  }
+
   function largestVisible() {
     let best = null;
     let bestArea = 0;
     for (const element of document.querySelectorAll('video, img')) {
       if (!isPostVideo(element) && !isPostImage(element)) continue;
+      if (!postIsOpen(element)) continue;
       const seen = visibleBox(element);
       if (seen.area > bestArea) {
         bestArea = seen.area;
@@ -92,8 +106,6 @@
   }
 
   function create(cache) {
-    let hovered = null;
-
     function resolve(element) {
       if (!element) return null;
 
@@ -117,19 +129,11 @@
     }
 
     return {
-      setHovered(element) {
-        if (isPostImage(element) || isPostVideo(element)) hovered = element;
-      },
       current() {
-        // Наведение липкое: курсор, идущий к кнопке, неизбежно уходит с
-        // плитки. Цель держится, пока остаётся видимой, и только потом
-        // уступает место самому крупному видимому элементу.
-        if (hovered && !document.contains(hovered)) hovered = null;
-        if (hovered && visibleBox(hovered).area <= 0) hovered = null;
-        return resolve(hovered || largestVisible());
+        return resolve(largestVisible());
       }
     };
   }
 
-  root.ReelboxTarget = { create, isPostImage, isPostVideo, visibleBox };
+  root.ReelboxTarget = { create };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

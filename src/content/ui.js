@@ -14,16 +14,6 @@
     shadow.innerHTML = `
       <style>
         :host { all: initial; }
-        .frame {
-          position: fixed;
-          border: 2px solid rgba(255, 255, 255, 0.9);
-          border-radius: 6px;
-          box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4);
-          pointer-events: none;
-          z-index: 2147482999;
-          transition: opacity 120ms ease;
-        }
-        .frame[hidden] { display: none; }
         .wrap {
           position: fixed;
           right: 24px;
@@ -84,12 +74,11 @@
         }
         .toast[data-visible="1"] { opacity: 1; transform: none; }
         @media (prefers-reduced-motion: reduce) {
-          .btn, .toast, .frame { transition: none; }
+          .btn, .toast { transition: none; }
           .btn:hover { transform: none; }
           .spinner { animation-duration: 1600ms; }
         }
       </style>
-      <div class="frame" hidden></div>
       <div class="wrap" hidden>
         <div class="toast" role="status"></div>
         <div class="row">
@@ -101,7 +90,6 @@
               <circle cx="16" cy="16" r="3" />
             </svg>
           </button>
-          <button class="btn btn-all" type="button" hidden title="Сохранить всю карусель"></button>
           <button class="btn btn-one" data-state="idle" type="button" title="Сохранить этот кадр">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -114,10 +102,8 @@
       </div>
     `;
 
-    const frame = shadow.querySelector('.frame');
     const wrap = shadow.querySelector('.wrap');
     const one = shadow.querySelector('.btn-one');
-    const all = shadow.querySelector('.btn-all');
     const audio = shadow.querySelector('.btn-audio');
     const toast = shadow.querySelector('.toast');
     // Именно из круглой кнопки: иконок в разметке теперь несколько.
@@ -143,35 +129,17 @@
     }
 
     one.addEventListener('click', () => handlers.onSaveOne());
-    all.addEventListener('click', () => handlers.onSaveAll());
     audio.addEventListener('click', () => handlers.onSaveAudio());
 
     return {
       setVisible(visible) {
         wrap.hidden = !visible;
-        if (!visible) frame.hidden = true;
-      },
-      setAllCount(count) {
-        const many = Number(count) > 1;
-        all.hidden = !many;
-        if (many) all.textContent = String(count);
       },
       setAudioAvailable(available) {
         audio.hidden = !available;
       },
       setState,
       say,
-      highlight(rect) {
-        if (!rect) {
-          frame.hidden = true;
-          return;
-        }
-        frame.hidden = false;
-        frame.style.left = `${Math.round(rect.left)}px`;
-        frame.style.top = `${Math.round(rect.top)}px`;
-        frame.style.width = `${Math.round(rect.width)}px`;
-        frame.style.height = `${Math.round(rect.height)}px`;
-      },
       resetTransient() {
         toast.dataset.visible = '0';
         if (one.dataset.state !== 'busy') setState('idle');

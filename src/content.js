@@ -165,6 +165,14 @@
     return extract.buildFilename(post, slide).replace(/\.[^.]+$/, '') + '.' + extension;
   }
 
+  // Всё, что уходит в папку Audio, — звук. Расширение mp4 здесь недопустимо:
+  // контейнер тот же самый, но по имени и система, и человек считают файл
+  // видео. Instagram отдаёт дорожки именно так, поэтому переименовываем.
+  function audioExtension(url) {
+    const extension = extract.extensionFromUrl(url, 'audio');
+    return extension === 'mp4' ? 'm4a' : extension;
+  }
+
   async function fetchBytes(url) {
     const response = await fetch(url, { credentials: 'omit' });
     if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
@@ -208,11 +216,13 @@
 
       let bytes;
       let extension = 'm4a';
+      let path;
 
       if (video) {
         // Звук вынимается из самого ролика. Прямой адрес дорожки Instagram
         // отдаёт в контейнере mp4, и файл получался с расширением видео,
         // а у лицензированной музыки там ещё и отрывок вместо всей дорожки.
+        path = 'разбор ролика';
         ui.say('Вынимаю звук из ролика…');
         bytes = globalThis.ReelboxMp4Audio.extractAudio(await fetchBytes(video.url));
       } else {
@@ -220,10 +230,11 @@
         const buffer = await fetchBytes(direct);
         try {
           bytes = globalThis.ReelboxMp4Audio.extractAudio(buffer);
+          path = 'разбор дорожки по прямому адресу';
         } catch (error) {
-          log('дорожка пришла не контейнером mp4, сохраняю как есть:', error.message);
+          path = `прямой адрес как есть (разбор не прошёл: ${error.message})`;
           bytes = new Uint8Array(buffer);
-          extension = extract.extensionFromUrl(direct, 'audio');
+          extension = audioExtension(direct);
         }
       }
 
@@ -234,7 +245,7 @@
         folder: 'Audio',
         key
       };
-      log('звук готов,', bytes.length, 'байт,', item.filename);
+      log('звук:', path, '| слайд:', found.slide.kind, '| файл:', item.filename, '|', bytes.length, 'байт');
 
       const result = await chrome.runtime.sendMessage({ kind: 'download', ...item });
 

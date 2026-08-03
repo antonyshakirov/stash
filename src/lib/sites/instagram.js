@@ -161,6 +161,15 @@
    * Instagram ставит /p/<код>/ и когда пост распахнут модальным окном поверх
    * ленты или профиля, поэтому адреса почти всегда достаточно.
    */
+  function codeFromUrl(href) {
+    try {
+      const base = typeof location !== 'undefined' ? location.href : 'https://example.com/';
+      return codeFromPath(new URL(href, base).pathname);
+    } catch (error) {
+      return null;
+    }
+  }
+
   function isOpen(element) {
     if (codeFromPath(location.pathname)) return true;
     return Boolean(element && element.closest && element.closest('div[role="dialog"]'));
@@ -185,6 +194,7 @@
     readAudio,
     readIdentity,
     codeFromPath,
+    codeFromUrl,
     isOpen,
     slideIndexFromUrl
   };

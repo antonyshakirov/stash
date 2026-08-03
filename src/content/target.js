@@ -71,7 +71,7 @@
       const link = node.querySelector ? node.querySelector(site.linkSelector) : null;
       if (link) {
         try {
-          const code = site.codeFromPath(new URL(link.href, location.origin).pathname);
+          const code = site.codeFromUrl(link.href);
           if (code) return code;
         } catch (error) {
           /* битая ссылка, идём выше */
@@ -91,7 +91,7 @@
       if (byKey) return { element, post: byKey.post, slide: byKey.slide, guessed: false };
 
       // У видео в src обычно blob:, поэтому пост ищется по адресу страницы.
-      const code = site.codeFromPath(location.pathname) || codeFromNearestLink(site, element);
+      const code = site.codeFromUrl(location.href) || codeFromNearestLink(site, element);
       const post = code ? cache.get(code) : null;
       // Цель на экране есть, данных о ней нет. Возвращаем её всё равно:
       // кнопка должна появиться и честно сказать, что источник не найден,

@@ -112,6 +112,15 @@
     return null;
   }
 
+  function codeFromUrl(href) {
+    try {
+      const base = typeof location !== 'undefined' ? location.href : 'https://example.com/';
+      return codeFromPath(new URL(href, base).pathname);
+    } catch (error) {
+      return null;
+    }
+  }
+
   function isOpen() {
     return Boolean(codeFromPath(location.pathname));
   }
@@ -132,6 +141,7 @@
     readAudio,
     readIdentity,
     codeFromPath,
+    codeFromUrl,
     isOpen,
     slideIndexFromUrl
   };

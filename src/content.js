@@ -140,9 +140,16 @@
     }
   }
 
-  function audioName(post, slide, url) {
-    const extension = extract.extensionFromUrl(url, 'audio');
+  const AUDIO_MIME = { m4a: 'audio/mp4', mp4: 'audio/mp4', aac: 'audio/aac', mp3: 'audio/mpeg' };
+
+  function audioName(post, slide, extension) {
     return extract.buildFilename(post, slide).replace(/\.[^.]+$/, '') + '.' + extension;
+  }
+
+  async function fetchBytes(url) {
+    const response = await fetch(url, { credentials: 'omit' });
+    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
+    return response.arrayBuffer();
   }
 
   // Готовый m4a уходит в загрузку через data:-адрес: только так сохраняется
@@ -177,27 +184,38 @@
       // «null#audio» роднил бы между собой чужие друг другу ролики.
       const base = extract.downloadKey(found.post, found.slide);
       const key = base ? `${base}#audio` : null;
+      const video = found.slide.kind === 'video' ? extract.bestSource(found.slide.sources) : null;
       const direct = found.post.audio && found.post.audio.url;
-      let item;
-      let bytes = null;
 
-      if (direct) {
-        item = { url: direct, filename: audioName(found.post, found.slide, direct), folder: 'Audio', key };
-        log('звук по прямому адресу', direct);
+      let bytes;
+      let extension = 'm4a';
+
+      if (video) {
+        // Звук вынимается из самого ролика. Прямой адрес дорожки Instagram
+        // отдаёт в контейнере mp4, и файл получался с расширением видео,
+        // а у лицензированной музыки там ещё и отрывок вместо всей дорожки.
+        ui.say('Вынимаю звук из ролика…');
+        bytes = globalThis.ReelboxMp4Audio.extractAudio(await fetchBytes(video.url));
       } else {
-        const source = extract.bestSource(found.slide.sources);
-        if (!source) throw new Error('источник не найден');
-        const response = await fetch(source.url, { credentials: 'omit' });
-        if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
-        bytes = globalThis.ReelboxMp4Audio.extractAudio(await response.arrayBuffer());
-        item = {
-          url: toDataUrl(bytes, 'audio/mp4'),
-          filename: audioName(found.post, found.slide, 'sound.m4a'),
-          folder: 'Audio',
-          key
-        };
-        log('звук вынут из ролика,', bytes.length, 'байт');
+        // Фотопост с прикреплённой музыкой: ролика нет, вынимать не из чего.
+        const buffer = await fetchBytes(direct);
+        try {
+          bytes = globalThis.ReelboxMp4Audio.extractAudio(buffer);
+        } catch (error) {
+          log('дорожка пришла не контейнером mp4, сохраняю как есть:', error.message);
+          bytes = new Uint8Array(buffer);
+          extension = extract.extensionFromUrl(direct, 'audio');
+        }
       }
+
+      const mime = AUDIO_MIME[extension] || 'audio/mp4';
+      const item = {
+        url: toDataUrl(bytes, mime),
+        filename: audioName(found.post, found.slide, extension),
+        folder: 'Audio',
+        key
+      };
+      log('звук готов,', bytes.length, 'байт,', item.filename);
 
       const result = await chrome.runtime.sendMessage({ kind: 'download', ...item });
 
@@ -207,15 +225,13 @@
       } else if (result && result.duplicate) {
         ui.setState('done');
         ui.say('Этот звук уже сохранён');
-      } else if (bytes) {
-        // Запасной путь для вынутого звука: отдаём файл в загрузку прямо
-        // отсюда. Подпапку так не задать, файл ложится в корень Загрузок.
+      } else {
+        // Запасной путь: отдаём файл в загрузку прямо отсюда. Подпапку так
+        // не задать, файл ложится в корень Загрузок.
         log('data:-адрес не прошёл:', result && result.error);
-        await saveBlob(new Blob([bytes], { type: 'audio/mp4' }), item.filename);
+        saveBlob(new Blob([bytes], { type: mime }), item.filename);
         ui.setState('done');
         ui.say('Звук сохранён в корень Загрузок (запасной путь)');
-      } else {
-        throw new Error((result && result.error) || 'загрузка не началась');
       }
     } catch (error) {
       ui.setState('error');

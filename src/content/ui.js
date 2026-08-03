@@ -156,12 +156,53 @@
           pointer-events: none;
         }
         .toast[data-visible="1"] { opacity: 1; transform: none; }
+        .report {
+          max-width: 420px;
+          background: rgba(20, 20, 22, 0.96);
+          color: #fff;
+          border: 1px solid rgba(255, 255, 255, 0.16);
+          border-radius: 12px;
+          padding: 10px;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+        }
+        .report[hidden] { display: none; }
+        .report-text {
+          font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+          font-size: 11px;
+          line-height: 1.45;
+          white-space: pre-wrap;
+          word-break: break-word;
+          max-height: 260px;
+          overflow: auto;
+          user-select: text;
+          -webkit-user-select: text;
+        }
+        .report-actions { display: flex; gap: 8px; justify-content: flex-end; }
+        .report-actions button {
+          border: 0;
+          border-radius: 8px;
+          padding: 6px 10px;
+          font-size: 12px;
+          cursor: pointer;
+          color: #fff;
+          background: rgba(255, 255, 255, 0.14);
+        }
+        .report-actions button:hover { background: rgba(255, 255, 255, 0.22); }
         @media (prefers-reduced-motion: reduce) {
           .btn, .toast { transition: none; }
           .spinner { animation-duration: 1600ms; }
         }
       </style>
       <div class="wrap" hidden>
+        <div class="report" hidden>
+          <div class="report-text"></div>
+          <div class="report-actions">
+            <button class="report-copy" type="button">Скопировать</button>
+            <button class="report-close" type="button">Закрыть</button>
+          </div>
+        </div>
         <div class="toast" role="status"></div>
         <div class="row">
           <button class="btn btn-audio" type="button" hidden title="Сохранить только звук">
@@ -188,6 +229,8 @@
     const one = shadow.querySelector('.btn-one');
     const audio = shadow.querySelector('.btn-audio');
     const toast = shadow.querySelector('.toast');
+    const report = shadow.querySelector('.report');
+    const reportText = shadow.querySelector('.report-text');
     // Именно из круглой кнопки: иконок в разметке теперь несколько.
     const iconMarkup = one.querySelector('.icon').outerHTML;
 
@@ -221,6 +264,22 @@
         handler();
       };
     }
+
+    // Отчёт об ошибке отдаётся кнопкой, а не консолью: искать его в
+    // инструментах разработчика — не работа человека, который смотрит ленту.
+    shadow.querySelector('.report-copy').addEventListener('click', () => {
+      const text = reportText.textContent;
+      try {
+        navigator.clipboard.writeText(text);
+        say('Отчёт скопирован');
+      } catch (error) {
+        say('Скопировать не вышло — выдели текст руками');
+      }
+    });
+
+    shadow.querySelector('.report-close').addEventListener('click', () => {
+      report.hidden = true;
+    });
 
     one.addEventListener('click', press(() => handlers.onSaveOne()));
     audio.addEventListener('click', press(() => handlers.onSaveAudio()));

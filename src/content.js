@@ -49,6 +49,14 @@
     }
   }
 
+  function version() {
+    try {
+      return chrome.runtime.getManifest().version;
+    } catch (error) {
+      return 'неизвестна';
+    }
+  }
+
   const RELOAD_HINT = 'Расширение обновилось. Перезагрузи страницу (⌘R).';
 
   function describeError(error) {
@@ -495,6 +503,37 @@
     ui.say(said);
   }
 
+  /**
+   * Отчёт для разбора: всё, что нужно, чтобы понять причину, и ничего
+   * лишнего. Значения параметров адреса не выводятся — там подпись сессии.
+   */
+  function buildReport(error, found) {
+    const lines = [];
+    lines.push(`Stash ${version()} — ${site.id}`);
+    lines.push(`адрес: ${location.origin}${location.pathname}`);
+    lines.push(`ошибка: ${describeError(error)}`);
+
+    if (site.usesStreams) {
+      lines.push(`форматов из ответа плеера: ${streamState.formats.length}`);
+      lines.push(`перехвачено потоков: ${streamState.streams.size}`);
+
+      for (const stream of streamState.streams.values()) {
+        lines.push(`  поток ${stream.itag} ${stream.kind} ${stream.mime || '?'} ${stream.size || 0} байт`);
+        lines.push(`    параметры: ${streamShape(stream)}`);
+      }
+
+      const picked = found && found.post && found.post.picked;
+      if (picked) {
+        const name = (entry) => (entry ? `${entry.itag} ${entry.mime || '?'}` : 'нет');
+        lines.push(`выбрано: видео ${name(picked.video)}; звук ${name(picked.audio)}; прогрессивный ${name(picked.progressive)}`);
+      }
+    } else {
+      lines.push(`постов в кэше: ${cache.count()}`);
+    }
+
+    return lines.join('\n');
+  }
+
   async function saveOne() {
     if (busy) return;
     const found = currentTarget();
@@ -511,7 +550,8 @@
         await saveStreamVideo(found);
       } catch (error) {
         ui.setState('error');
-        ui.say(`Не получилось: ${describeError(error)}`);
+        ui.say('Не получилось. Ниже отчёт: нажми «Скопировать» и пришли мне.');
+        ui.report(buildReport(error, found));
       } finally {
         busy = false;
       }
@@ -616,7 +656,8 @@
         await saveStreamAudio(found);
       } catch (error) {
         ui.setState('error');
-        ui.say(`Звук не сохранён: ${describeError(error)}`);
+        ui.say('Звук не сохранён. Ниже отчёт: нажми «Скопировать» и пришли мне.');
+        ui.report(buildReport(error, found));
       } finally {
         busy = false;
       }
@@ -752,16 +793,6 @@
   // решит, что ролик сменился, и сотрёт только что прочитанное.
   if (site.usesStreams) streamState.code = site.codeFromUrl(location.href);
   scanInlineJson();
-
-  // Версия в консоли: единственный надёжный способ убедиться, что во вкладке
-  // работает свежий код, а не скрипт, оставшийся от прошлой сборки.
-  function version() {
-    try {
-      return chrome.runtime.getManifest().version;
-    } catch (error) {
-      return 'неизвестна';
-    }
-  }
 
   log('готов, версия', version(), '| площадка:', site.id);
 })();

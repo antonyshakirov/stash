@@ -202,6 +202,7 @@
     const found = target.current();
     ui.setVisible(Boolean(found));
     ui.setAllCount(found && found.post ? found.post.slides.length : 0);
+    ui.highlight(found ? found.element.getBoundingClientRect() : null);
     if (location.href !== lastHref) {
       lastHref = location.href;
       ui.resetTransient();

@@ -121,7 +121,12 @@
         if (isPostImage(element) || isPostVideo(element)) hovered = element;
       },
       current() {
-        return resolve(largestVisible());
+        // Наведение липкое: курсор, идущий к кнопке, неизбежно уходит с
+        // плитки. Цель держится, пока остаётся видимой, и только потом
+        // уступает место самому крупному видимому элементу.
+        if (hovered && !document.contains(hovered)) hovered = null;
+        if (hovered && visibleBox(hovered).area <= 0) hovered = null;
+        return resolve(hovered || largestVisible());
       }
     };
   }

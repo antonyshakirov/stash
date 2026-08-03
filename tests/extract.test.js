@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const extract = require('../src/lib/extract.js');
+const instagram = require('../src/lib/sites/instagram.js');
 
 // Форма, приближённая к тому, что Instagram отдаёт для одного ролика.
 function sampleResponse() {
@@ -69,7 +70,7 @@ function sampleCarousel() {
 }
 
 test('карусель разворачивается в слайды по порядку', () => {
-  const posts = extract.collectMedia(sampleCarousel());
+  const posts = extract.collectMedia(sampleCarousel(), instagram);
   assert.strictEqual(posts.length, 1);
   assert.strictEqual(posts[0].code, 'DKx9dQ2');
   assert.strictEqual(posts[0].username, 'nike');
@@ -78,17 +79,17 @@ test('карусель разворачивается в слайды по по�
 });
 
 test('дети карусели не всплывают как отдельные посты', () => {
-  const posts = extract.collectMedia(sampleCarousel());
+  const posts = extract.collectMedia(sampleCarousel(), instagram);
   assert.strictEqual(posts.length, 1);
 });
 
 test('в смешанной карусели у каждого слайда свой тип', () => {
-  const posts = extract.collectMedia(sampleCarousel());
+  const posts = extract.collectMedia(sampleCarousel(), instagram);
   assert.deepStrictEqual(posts[0].slides.map((s) => s.kind), ['image', 'image', 'video']);
 });
 
 test('у видео-слайда в источниках только видео, обложка отбрасывается', () => {
-  const posts = extract.collectMedia(sampleCarousel());
+  const posts = extract.collectMedia(sampleCarousel(), instagram);
   const third = posts[0].slides[2];
   assert.strictEqual(third.sources.length, 1);
   assert.strictEqual(third.sources[0].url, 'https://cdn/c_n.mp4');
@@ -110,7 +111,7 @@ test('старая схема edge_sidecar_to_children разбирается н
       }
     }
   };
-  const posts = extract.collectMedia(payload);
+  const posts = extract.collectMedia(payload, instagram);
   assert.strictEqual(posts.length, 1);
   assert.strictEqual(posts[0].code, 'CZabc12');
   assert.strictEqual(posts[0].slides.length, 2);
@@ -127,7 +128,7 @@ test('пост с одной картинкой даёт один слайд', (
       }
     ]
   };
-  const posts = extract.collectMedia(payload);
+  const posts = extract.collectMedia(payload, instagram);
   assert.strictEqual(posts.length, 1);
   assert.strictEqual(posts[0].slides.length, 1);
   assert.strictEqual(posts[0].slides[0].index, 1);
@@ -135,7 +136,7 @@ test('пост с одной картинкой даёт один слайд', (
 });
 
 test('ролик остаётся постом с одним видео-слайдом', () => {
-  const posts = extract.collectMedia(sampleResponse());
+  const posts = extract.collectMedia(sampleResponse(), instagram);
   assert.strictEqual(posts.length, 1);
   assert.strictEqual(posts[0].code, 'DKx9dQ2');
   assert.strictEqual(posts[0].username, 'nike');
@@ -157,7 +158,7 @@ test('понимает старую схему с одиночным video_url',
       }
     }
   };
-  const posts = extract.collectMedia(payload);
+  const posts = extract.collectMedia(payload, instagram);
   assert.strictEqual(posts.length, 1);
   assert.strictEqual(posts[0].code, 'CZabc12');
   assert.strictEqual(posts[0].username, 'adidas');
@@ -173,13 +174,13 @@ test('собирает несколько постов из ленты', () => {
       { code: 'BBB', user: { username: 'two' }, image_versions2: { candidates: [{ url: 'https://cdn/2_n.jpg', width: 1080, height: 1080 }] } }
     ]
   };
-  const posts = extract.collectMedia(payload);
+  const posts = extract.collectMedia(payload, instagram);
   assert.deepStrictEqual(posts.map((post) => post.code).sort(), ['AAA', 'BBB']);
   assert.deepStrictEqual(posts.map((post) => post.slides[0].kind).sort(), ['image', 'video']);
 });
 
 test('числовой pk превращается в строку', () => {
-  const posts = extract.collectMedia(sampleCarousel());
+  const posts = extract.collectMedia(sampleCarousel(), instagram);
   assert.strictEqual(posts[0].pk, '3412345678');
 });
 
@@ -194,7 +195,7 @@ test('пост без кода опознаётся по pk', () => {
       }
     ]
   };
-  const posts = extract.collectMedia(payload);
+  const posts = extract.collectMedia(payload, instagram);
   assert.strictEqual(posts.length, 1);
   assert.strictEqual(posts[0].code, null);
   assert.strictEqual(posts[0].pk, '999');
@@ -215,7 +216,7 @@ test('один пост из двух ответов сливается в са�
       }
     ]
   };
-  const merged = extract.mergePosts(extract.collectMedia(lean)[0], extract.collectMedia(rich)[0]);
+  const merged = extract.mergePosts(extract.collectMedia(lean, instagram)[0], extract.collectMedia(rich, instagram)[0]);
   assert.strictEqual(merged.slides.length, 2);
   assert.strictEqual(merged.username, 'nike');
   assert.strictEqual(merged.takenAt, 1785542400);
@@ -237,7 +238,7 @@ test('читает адрес оригинального звука', () => {
       }
     ]
   };
-  const post = extract.collectMedia(payload)[0];
+  const post = extract.collectMedia(payload, instagram)[0];
   assert.strictEqual(post.audio.url, 'https://cdn/v/sound_n.m4a?x=1');
   assert.strictEqual(post.audio.title, 'Original audio');
 });
@@ -260,7 +261,7 @@ test('читает адрес лицензированной музыки', () =
       }
     ]
   };
-  const post = extract.collectMedia(payload)[0];
+  const post = extract.collectMedia(payload, instagram)[0];
   assert.strictEqual(post.audio.url, 'https://cdn/v/track_n.m4a');
   assert.strictEqual(post.audio.title, 'Artist — Track');
 });
@@ -278,11 +279,11 @@ test('оригинальный звук предпочитается музык�
       }
     ]
   };
-  assert.strictEqual(extract.collectMedia(payload)[0].audio.url, 'https://cdn/v/own_n.m4a');
+  assert.strictEqual(extract.collectMedia(payload, instagram)[0].audio.url, 'https://cdn/v/own_n.m4a');
 });
 
 test('без метаданных звука поле пустое', () => {
-  const posts = extract.collectMedia(sampleResponse());
+  const posts = extract.collectMedia(sampleResponse(), instagram);
   assert.strictEqual(posts[0].audio, null);
 });
 
@@ -300,22 +301,22 @@ test('звук уходит в свою папку', () => {
 
 test('не находит ничего в ответе без медиа', () => {
   const payload = { data: { user: { username: 'nike' }, items: [{ code: 'abc', image_versions: [] }] } };
-  assert.deepStrictEqual(extract.collectMedia(payload), []);
+  assert.deepStrictEqual(extract.collectMedia(payload, instagram), []);
 });
 
 test('не спотыкается о мусор вместо ответа', () => {
-  assert.deepStrictEqual(extract.collectMedia(null), []);
-  assert.deepStrictEqual(extract.collectMedia('строка'), []);
-  assert.deepStrictEqual(extract.collectMedia(42), []);
-  assert.deepStrictEqual(extract.collectMedia({ video_versions: 'не массив' }), []);
-  assert.deepStrictEqual(extract.collectMedia({ carousel_media: 'не массив' }), []);
+  assert.deepStrictEqual(extract.collectMedia(null, instagram), []);
+  assert.deepStrictEqual(extract.collectMedia('строка', instagram), []);
+  assert.deepStrictEqual(extract.collectMedia(42, instagram), []);
+  assert.deepStrictEqual(extract.collectMedia({ video_versions: 'не массив' }, instagram), []);
+  assert.deepStrictEqual(extract.collectMedia({ carousel_media: 'не массив' }, instagram), []);
 });
 
 test('переживает циклическую структуру', () => {
   const payload = sampleCarousel();
   payload.self = payload;
   payload.data.parent = payload;
-  assert.strictEqual(extract.collectMedia(payload).length, 1);
+  assert.strictEqual(extract.collectMedia(payload, instagram).length, 1);
 });
 
 test('ключ CDN одинаков у одного файла в разных размерах', () => {
@@ -375,7 +376,7 @@ function samplePost(slideCount) {
 }
 
 test('выбирает вариант с наибольшим разрешением', () => {
-  const posts = extract.collectMedia(sampleResponse());
+  const posts = extract.collectMedia(sampleResponse(), instagram);
   assert.strictEqual(extract.bestSource(posts[0].slides[0].sources).url, 'https://cdn.example/1080.mp4');
 });
 
@@ -395,7 +396,7 @@ test('имя слайда карусели с номером', () => {
 });
 
 test('имя ролика не изменилось', () => {
-  const posts = extract.collectMedia(sampleResponse());
+  const posts = extract.collectMedia(sampleResponse(), instagram);
   assert.strictEqual(extract.buildFilename(posts[0], posts[0].slides[0]), 'nike — 2026-08-01 — DKx9dQ2.mp4');
 });
 
@@ -403,7 +404,7 @@ test('имя опускает то, чего не знает', () => {
   const slide = { index: 1, kind: 'image', sources: [{ url: 'https://cdn/v/x_n.jpg', width: 1080, height: 1080 }] };
   assert.strictEqual(
     extract.buildFilename({ code: 'DKx9dQ2', slides: [slide] }, slide),
-    'instagram — DKx9dQ2.jpg'
+    'stash — DKx9dQ2.jpg'
   );
   assert.strictEqual(
     extract.buildFilename({ username: 'nike', slides: [slide] }, slide),
@@ -465,18 +466,18 @@ test('длинное имя обрезается', () => {
 });
 
 test('код ролика читается из всех форм адреса', () => {
-  assert.strictEqual(extract.codeFromPath('/reel/DKx9dQ2/'), 'DKx9dQ2');
-  assert.strictEqual(extract.codeFromPath('/reels/DKx9dQ2/'), 'DKx9dQ2');
-  assert.strictEqual(extract.codeFromPath('/p/DKx9dQ2/'), 'DKx9dQ2');
-  assert.strictEqual(extract.codeFromPath('/tv/DKx9dQ2/'), 'DKx9dQ2');
-  assert.strictEqual(extract.codeFromPath('/nike/reel/DKx9dQ2/'), 'DKx9dQ2');
+  assert.strictEqual(instagram.codeFromPath('/reel/DKx9dQ2/'), 'DKx9dQ2');
+  assert.strictEqual(instagram.codeFromPath('/reels/DKx9dQ2/'), 'DKx9dQ2');
+  assert.strictEqual(instagram.codeFromPath('/p/DKx9dQ2/'), 'DKx9dQ2');
+  assert.strictEqual(instagram.codeFromPath('/tv/DKx9dQ2/'), 'DKx9dQ2');
+  assert.strictEqual(instagram.codeFromPath('/nike/reel/DKx9dQ2/'), 'DKx9dQ2');
 });
 
 test('на страницах без ролика кода нет', () => {
-  assert.strictEqual(extract.codeFromPath('/'), null);
-  assert.strictEqual(extract.codeFromPath('/nike/'), null);
-  assert.strictEqual(extract.codeFromPath('/explore/tags/design/'), null);
-  assert.strictEqual(extract.codeFromPath(null), null);
+  assert.strictEqual(instagram.codeFromPath('/'), null);
+  assert.strictEqual(instagram.codeFromPath('/nike/'), null);
+  assert.strictEqual(instagram.codeFromPath('/explore/tags/design/'), null);
+  assert.strictEqual(instagram.codeFromPath(null), null);
 });
 
 test('blob-ссылку из плеера скачивать нельзя', () => {

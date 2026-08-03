@@ -8,16 +8,22 @@
   const cacheModule = globalThis.StashCache;
   const targetModule = globalThis.StashTarget;
   const uiModule = globalThis.StashUI;
-  if (!extract || !cacheModule || !targetModule || !uiModule) return;
+  const sites = globalThis.StashSites;
+  if (!extract || !cacheModule || !targetModule || !uiModule || !sites) return;
   if (window.__stashContentReady) return;
   window.__stashContentReady = true;
+
+  // Площадка выбирается один раз: на неподдержанном хосте расширение просто
+  // ничего не делает и ничего не рисует.
+  const site = sites.pick(location.hostname);
+  if (!site) return;
 
   const MAX_INLINE_JSON = 3 * 1024 * 1024;
   const POLL_INTERVAL = 700;
   const SMALL_SIDE = 1080;
 
   const cache = cacheModule.create();
-  const target = targetModule.create(cache);
+  const target = targetModule.create(cache, site);
   let busy = false;
 
   function debugEnabled() {
@@ -67,7 +73,7 @@
       const text = script.textContent;
       if (!text || text.length > MAX_INLINE_JSON) continue;
       try {
-        cache.ingest(extract.collectMedia(JSON.parse(text)));
+        cache.ingest(extract.collectMedia(JSON.parse(text), site));
       } catch (error) {
         /* не всякий инлайновый JSON нам подходит */
       }
@@ -368,5 +374,5 @@
     }
   }
 
-  log('готов, версия', version());
+  log('готов, версия', version(), '| площадка:', site.id);
 })();

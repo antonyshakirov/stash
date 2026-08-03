@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Stash",
-  "version": "0.3.0",
-  "description": "Сохраняет кадры и ролики Instagram в Загрузки одним нажатием.",
+  "version": "0.4.0",
+  "description": "Сохраняет кадры, ролики и звук из Instagram и TikTok одним нажатием.",
   "permissions": [
     "downloads",
     "storage"
@@ -10,7 +10,12 @@
   "host_permissions": [
     "*://*.instagram.com/*",
     "*://*.cdninstagram.com/*",
-    "*://*.fbcdn.net/*"
+    "*://*.fbcdn.net/*",
+    "*://*.tiktok.com/*",
+    "*://*.tiktokcdn.com/*",
+    "*://*.tiktokcdn-us.com/*",
+    "*://*.tiktokv.com/*",
+    "*://*.ibyteimg.com/*"
   ],
   "background": {
     "service_worker": "src/background.js"
@@ -33,10 +38,14 @@
   "content_scripts": [
     {
       "matches": [
-        "*://*.instagram.com/*"
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*"
       ],
       "js": [
         "src/lib/extract.js",
+        "src/lib/sites/instagram.js",
+        "src/lib/sites/tiktok.js",
+        "src/lib/sites/registry.js",
         "src/lib/cache.js",
         "src/interceptor.js"
       ],
@@ -46,10 +55,14 @@
     },
     {
       "matches": [
-        "*://*.instagram.com/*"
+        "*://*.instagram.com/*",
+        "*://*.tiktok.com/*"
       ],
       "js": [
         "src/lib/extract.js",
+        "src/lib/sites/instagram.js",
+        "src/lib/sites/tiktok.js",
+        "src/lib/sites/registry.js",
         "src/lib/cache.js",
         "src/lib/mp4audio.js",
         "src/content/target.js",

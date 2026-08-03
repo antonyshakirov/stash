@@ -10,7 +10,11 @@
 
 (function () {
   const extract = globalThis.StashExtract;
-  if (!extract) return;
+  const sites = globalThis.StashSites;
+  if (!extract || !sites) return;
+
+  const site = sites.pick(location.hostname);
+  if (!site) return;
   if (globalThis.__stashInterceptorReady) return;
   globalThis.__stashInterceptorReady = true;
 
@@ -64,7 +68,7 @@
     const data = parseBody(text);
     if (!data) return;
     try {
-      publish(extract.collectMedia(data));
+      publish(extract.collectMedia(data, site));
     } catch (error) {
       /* разбор чужого ответа не повод падать */
     }
@@ -109,7 +113,7 @@
             if (type === '' || type === 'text') {
               digest(this.responseText);
             } else if (type === 'json' && this.response) {
-              publish(extract.collectMedia(this.response));
+              publish(extract.collectMedia(this.response, site));
             }
           } catch (error) {
             /* ответ недоступен, это нормально */

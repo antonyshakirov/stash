@@ -1,22 +1,28 @@
 'use strict';
 
-// Чистое ядро Stash: разбор данных Instagram без единого обращения к браузеру.
-// Один и тот же файл грузится в контекст страницы, в контент-скрипт и в тесты,
-// поэтому наружу он отдаётся и через globalThis, и через module.exports.
+// Чистое ядро Stash: обход произвольных данных, имена файлов, ключи.
+// Про конкретные площадки не знает ничего — словарь полей приходит снаружи,
+// см. `src/lib/sites/*`. Один и тот же файл грузится в контекст страницы,
+// в контент-скрипт и в тесты, поэтому наружу он отдаётся и через globalThis,
+// и через module.exports.
 
 (function (root, factory) {
   const api = factory();
   root.StashExtract = api;
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
-  // Потолок обхода: живые ответы Instagram огромны, а зациклиться на них нельзя.
+  // Потолок обхода: живые ответы площадок огромны, а зациклиться на них нельзя.
   const MAX_NODES = 50000;
   const MAX_NAME_SEGMENT = 60;
-  const POST_SEGMENTS = new Set(['reel', 'reels', 'p', 'tv']);
   // Символы, недопустимые в имени файла для Chrome, плюс управляющие.
   const FORBIDDEN_IN_NAME = /[\x00-\x1f\\/:*?"<>|]/g;
-  // Расширения, которые Instagram реально отдаёт. Всё прочее — не наше дело.
-  const KNOWN_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'mp4', 'm4a', 'aac', 'mp3']);
+  // Расширения, которые площадки реально отдают. Всё прочее — не наше дело.
+  const KNOWN_EXTENSIONS = new Set([
+    'jpg', 'jpeg', 'png', 'webp', 'heic',
+    'mp4', 'm4a', 'aac', 'mp3', 'webm', 'weba', 'opus'
+  ]);
+
+  // --- мелочь, нужная и здесь, и словарям площадок ------------------------
 
   function isObject(value) {
     return value !== null && typeof value === 'object';
@@ -30,17 +36,6 @@
     return null;
   }
 
-  function readUsername(node) {
-    for (const key of ['user', 'owner', 'media_owner']) {
-      const holder = node[key];
-      if (isObject(holder)) {
-        const name = firstString(holder, ['username', 'handle']);
-        if (name) return name;
-      }
-    }
-    return firstString(node, ['username']);
-  }
-
   // Идентификатор приходит и строкой, и числом: pk у Instagram числовой.
   function readId(node, keys) {
     for (const key of keys) {
@@ -51,10 +46,10 @@
     return null;
   }
 
-  function readTakenAt(node) {
-    for (const key of ['taken_at', 'taken_at_timestamp', 'device_timestamp']) {
+  /** Unix-секунды, а не миллисекунды: отсечка по разумному диапазону дат. */
+  function readUnixSeconds(node, keys) {
+    for (const key of keys) {
       const value = Number(node[key]);
-      // Секунды, не миллисекунды: у Instagram это unix seconds.
       if (Number.isFinite(value) && value > 1000000000 && value < 4000000000) {
         return Math.floor(value);
       }
@@ -62,135 +57,31 @@
     return null;
   }
 
-  // Варианты видео у одного объекта-медиа. Основная форма — video_versions,
-  // старая веб-схема отдавала одиночный video_url.
-  function readVideos(node) {
-    const videos = [];
-
-    if (Array.isArray(node.video_versions)) {
-      for (const version of node.video_versions) {
-        if (!isObject(version)) continue;
-        if (typeof version.url !== 'string' || !version.url) continue;
-        videos.push({
-          url: version.url,
-          width: Number(version.width) || 0,
-          height: Number(version.height) || 0
-        });
-      }
-    }
-
-    if (typeof node.video_url === 'string' && node.video_url) {
-      videos.push({
-        url: node.video_url,
-        width: Number(node.original_width) || Number(node.dimensions?.width) || 0,
-        height: Number(node.original_height) || Number(node.dimensions?.height) || 0
-      });
-    }
-
-    return videos;
+  function sourceOf(url, width, height) {
+    if (typeof url !== 'string' || !url) return null;
+    return { url, width: Number(width) || 0, height: Number(height) || 0 };
   }
 
-  // Варианты картинки у одного объекта-медиа. Основная форма —
-  // image_versions2.candidates, старая веб-схема отдавала display_url
-  // и display_resources.
-  function readImages(node) {
-    const images = [];
-
-    const candidates = isObject(node.image_versions2) ? node.image_versions2.candidates : null;
-    if (Array.isArray(candidates)) {
-      for (const candidate of candidates) {
-        if (!isObject(candidate)) continue;
-        if (typeof candidate.url !== 'string' || !candidate.url) continue;
-        images.push({
-          url: candidate.url,
-          width: Number(candidate.width) || 0,
-          height: Number(candidate.height) || 0
-        });
-      }
-    }
-
-    if (Array.isArray(node.display_resources)) {
-      for (const resource of node.display_resources) {
-        if (!isObject(resource)) continue;
-        if (typeof resource.src !== 'string' || !resource.src) continue;
-        images.push({
-          url: resource.src,
-          width: Number(resource.config_width) || 0,
-          height: Number(resource.config_height) || 0
-        });
-      }
-    }
-
-    if (typeof node.display_url === 'string' && node.display_url) {
-      images.push({
-        url: node.display_url,
-        width: Number(node.dimensions && node.dimensions.width) || 0,
-        height: Number(node.dimensions && node.dimensions.height) || 0
-      });
-    }
-
-    return images;
-  }
-
-  function audioTitle(info) {
-    const artist = firstString(info, ['display_artist', 'artist_name']);
-    const title = firstString(info, ['original_audio_title', 'title', 'song_name']);
-    if (artist && title) return `${artist} — ${title}`;
-    return title || artist || null;
-  }
-
-  /**
-   * Прямой адрес звуковой дорожки, если Instagram его дал. Оригинальный звук
-   * предпочтительнее музыки: у лицензированной по этому адресу часто отрывок.
-   */
-  function readAudio(node) {
-    const clips = isObject(node.clips_metadata) ? node.clips_metadata : node;
-
-    const own = isObject(clips.original_sound_info) ? clips.original_sound_info : null;
-    if (own) {
-      const url = firstString(own, ['progressive_download_url']);
-      if (url) return { url, title: audioTitle(own) };
-    }
-
-    const music = isObject(clips.music_info) ? clips.music_info : null;
-    const asset = music && isObject(music.music_asset_info) ? music.music_asset_info : null;
-    if (asset) {
-      const url = firstString(asset, ['progressive_download_url']);
-      if (url) return { url, title: audioTitle(asset) };
-    }
-
-    return null;
-  }
-
-  /** Слайды карусели в обеих схемах: новой v1 и старой graphql. */
-  function readChildren(node) {
-    if (Array.isArray(node.carousel_media)) {
-      return node.carousel_media.filter(isObject);
-    }
-    const edges = isObject(node.edge_sidecar_to_children) ? node.edge_sidecar_to_children.edges : null;
-    if (Array.isArray(edges)) {
-      return edges.map((edge) => (isObject(edge) ? edge.node : null)).filter(isObject);
-    }
-    return [];
-  }
+  // --- обход --------------------------------------------------------------
 
   // У видео-поста есть и обложка, и само видео. Обложка нам не нужна:
   // сохранение обложек отдельно от поста в границы не входит.
-  function readSlide(node, index) {
-    const videos = readVideos(node);
+  function readSlide(vocab, node, index) {
+    const videos = vocab.readVideos(node) || [];
     if (videos.length) return { index, kind: 'video', sources: videos };
-    const images = readImages(node);
+    const images = vocab.readImages(node) || [];
     if (images.length) return { index, kind: 'image', sources: images };
     return null;
   }
 
-  function buildPost(node, slides) {
+  function buildPost(vocab, node, slides) {
+    const identity = vocab.readIdentity(node) || {};
     return {
-      code: firstString(node, ['code', 'shortcode']),
-      pk: readId(node, ['pk', 'id', 'media_id']),
-      username: readUsername(node),
-      takenAt: readTakenAt(node),
-      audio: readAudio(node),
+      code: identity.code || null,
+      pk: identity.pk || null,
+      username: identity.username || null,
+      takenAt: identity.takenAt || null,
+      audio: (vocab.readAudio && vocab.readAudio(node)) || null,
       slides
     };
   }
@@ -216,9 +107,11 @@
   /**
    * Обходит произвольную структуру и собирает посты со слайдами.
    * Намеренно не знает путей внутри ответа: ищет по признаку, а не по адресу,
-   * чтобы пережить переезд полей на стороне Instagram.
+   * чтобы пережить переезд полей на стороне площадки.
    */
-  function collectMedia(payload) {
+  function collectMedia(payload, vocab) {
+    if (!vocab) return [];
+
     const seen = new Set();
     // Дети карусели: они уже учтены как слайды и своими постами быть не должны.
     const consumed = new Set();
@@ -232,18 +125,18 @@
       seen.add(node);
       if (++visited > MAX_NODES) break;
 
-      const children = readChildren(node);
+      const children = (vocab.readChildren && vocab.readChildren(node)) || [];
       if (children.length) {
         const slides = [];
         for (const child of children) {
           consumed.add(child);
-          const slide = readSlide(child, slides.length + 1);
+          const slide = readSlide(vocab, child, slides.length + 1);
           if (slide) slides.push(slide);
         }
-        if (slides.length) drafts.push({ node, post: buildPost(node, slides) });
+        if (slides.length) drafts.push({ node, post: buildPost(vocab, node, slides) });
       } else {
-        const slide = readSlide(node, 1);
-        if (slide) drafts.push({ node, post: buildPost(node, [slide]) });
+        const slide = readSlide(vocab, node, 1);
+        if (slide) drafts.push({ node, post: buildPost(vocab, node, [slide]) });
       }
 
       for (const value of Object.values(node)) {
@@ -263,6 +156,8 @@
 
     return Array.from(found.values());
   }
+
+  // --- выбор и имена ------------------------------------------------------
 
   /** Самый крупный вариант: для референсов качество важнее веса файла. */
   function bestSource(sources) {
@@ -298,12 +193,37 @@
     return `${year}-${month}-${day}`;
   }
 
+  /**
+   * Последний сегмент пути CDN-адреса. У Instagram он один и тот же для
+   * одного файла в любом размере: размер живёт в query, подпись тоже,
+   * и они меняются от запроса к запросу. Сам файл — нет.
+   */
+  function mediaKeyFromUrl(url) {
+    if (typeof url !== 'string' || !url) return null;
+    const path = url.split('?')[0].split('#')[0];
+    const segment = path.slice(path.lastIndexOf('/') + 1);
+    return segment || null;
+  }
+
+  function extensionFromUrl(url, kind) {
+    let fallback = 'jpg';
+    if (kind === 'video') fallback = 'mp4';
+    if (kind === 'audio') fallback = 'm4a';
+
+    const key = mediaKeyFromUrl(url);
+    if (!key) return fallback;
+    const dot = key.lastIndexOf('.');
+    if (dot < 1) return fallback;
+    const extension = key.slice(dot + 1).toLowerCase();
+    return KNOWN_EXTENSIONS.has(extension) ? extension : fallback;
+  }
+
   function buildFilename(post, slide) {
     const parts = [];
     const username = post && post.username ? sanitizeSegment(post.username) : '';
     const id = post && (post.code || post.pk) ? sanitizeSegment(post.code || post.pk) : '';
 
-    parts.push(username || 'instagram');
+    parts.push(username || 'stash');
     if (post && post.takenAt) parts.push(formatDate(post.takenAt));
     if (id) parts.push(id);
 
@@ -335,61 +255,28 @@
     return many && slide && slide.index ? `${id}#${slide.index}` : String(id);
   }
 
-  /** Код ролика из адреса: /reel/<code>/, /reels/<code>/, /<автор>/reel/<code>/. */
-  function codeFromPath(pathname) {
-    if (typeof pathname !== 'string') return null;
-    const segments = pathname.split('/').filter(Boolean);
-    for (let i = 0; i < segments.length - 1; i += 1) {
-      if (POST_SEGMENTS.has(segments[i])) {
-        const code = segments[i + 1];
-        if (/^[A-Za-z0-9_-]+$/.test(code)) return code;
-      }
-    }
-    return null;
-  }
-
   /** Похоже ли на прямую ссылку на файл, а не на blob: из плеера. */
   function isDirectVideoUrl(url) {
     return typeof url === 'string' && /^https?:\/\//i.test(url);
   }
 
-  /**
-   * Последний сегмент пути CDN-адреса. У Instagram он один и тот же для
-   * одного файла в любом размере: размер живёт в query (`stp`), подпись в
-   * `oh` и `oe`, и они меняются от запроса к запросу.
-   */
-  function mediaKeyFromUrl(url) {
-    if (typeof url !== 'string' || !url) return null;
-    const path = url.split('?')[0].split('#')[0];
-    const segment = path.slice(path.lastIndexOf('/') + 1);
-    return segment || null;
-  }
-
-  function extensionFromUrl(url, kind) {
-    let fallback = 'jpg';
-    if (kind === 'video') fallback = 'mp4';
-    if (kind === 'audio') fallback = 'm4a';
-    const key = mediaKeyFromUrl(url);
-    if (!key) return fallback;
-    const dot = key.lastIndexOf('.');
-    if (dot < 1) return fallback;
-    const extension = key.slice(dot + 1).toLowerCase();
-    return KNOWN_EXTENSIONS.has(extension) ? extension : fallback;
-  }
-
   return {
     collectMedia,
     mergePosts,
-    readAudio,
-    mediaKeyFromUrl,
-    extensionFromUrl,
     bestSource,
     buildFilename,
     folderFor,
     downloadKey,
+    mediaKeyFromUrl,
+    extensionFromUrl,
     sanitizeSegment,
     formatDate,
-    codeFromPath,
-    isDirectVideoUrl
+    isDirectVideoUrl,
+    // Для словарей площадок.
+    isObject,
+    firstString,
+    readId,
+    readUnixSeconds,
+    sourceOf
   };
 });

@@ -546,6 +546,7 @@
     if (site.usesStreams) {
       busy = true;
       ui.setState('busy');
+      ui.report(null);
       try {
         await saveStreamVideo(found);
       } catch (error) {
@@ -652,6 +653,7 @@
     ui.setState('busy');
 
     if (site.usesStreams) {
+      ui.report(null);
       try {
         await saveStreamAudio(found);
       } catch (error) {

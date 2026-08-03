@@ -258,10 +258,20 @@
 
     // Мышь фокус не оставляет: белое кольцо после клика выглядело поломкой.
     // Для клавиатуры обводка остаётся, focus-visible на blur не реагирует.
+    // Обработчики асинхронные, и их отказ никто не ждёт. Без этого перехвата
+    // ошибка внутри самого пути обработки ошибок пропала бы бесследно —
+    // ровно так однажды и потерялась панель отчёта.
     function press(handler) {
       return (event) => {
         event.currentTarget.blur();
-        handler();
+        try {
+          const result = handler();
+          if (result && typeof result.catch === 'function') {
+            result.catch((error) => say(`Сбой расширения: ${error && error.message}`));
+          }
+        } catch (error) {
+          say(`Сбой расширения: ${error && error.message}`);
+        }
       };
     }
 
@@ -326,6 +336,15 @@
       },
       setState,
       say,
+      /** Пустой текст прячет панель: так отчёт не висит от прошлой попытки. */
+      report(text) {
+        if (!text) {
+          report.hidden = true;
+          return;
+        }
+        reportText.textContent = text;
+        report.hidden = false;
+      },
       resetTransient() {
         toast.dataset.visible = '0';
         if (one.dataset.state !== 'busy') setState('idle');

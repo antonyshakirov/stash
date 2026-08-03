@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Stash",
-  "version": "0.5.6",
+  "version": "0.5.7",
   "description": "Сохраняет кадры, ролики и звук из Instagram, TikTok и YouTube одним нажатием.",
   "permissions": [
     "downloads",

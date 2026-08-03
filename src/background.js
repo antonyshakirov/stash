@@ -3,7 +3,7 @@
 // Service worker: единственное место, где Reelbox трогает загрузки и хранилище.
 
 const SAVED_KEY = 'saved';
-const SUBFOLDER = 'Reels';
+const BATCH_GAP = 150;
 
 // downloadId -> откуда пришла загрузка, чтобы сообщить вкладке о срыве.
 const inFlight = new Map();
@@ -13,49 +13,83 @@ async function readSaved() {
   return store[SAVED_KEY] || {};
 }
 
-async function remember(code, filename) {
-  if (!code) return;
+async function remember(key, filename) {
+  if (!key) return;
   const saved = await readSaved();
-  saved[code] = { filename, at: Date.now() };
+  saved[key] = { filename, at: Date.now() };
   await chrome.storage.local.set({ [SAVED_KEY]: saved });
 }
 
-async function forget(code) {
-  if (!code) return;
+async function forget(key) {
+  if (!key) return;
   const saved = await readSaved();
-  if (!saved[code]) return;
-  delete saved[code];
+  if (!saved[key]) return;
+  delete saved[key];
   await chrome.storage.local.set({ [SAVED_KEY]: saved });
 }
 
-async function startDownload(message, sender) {
-  const { url, filename, code } = message;
-  if (!url || !filename) return { ok: false, error: 'Нечего сохранять' };
+async function startDownload(item, sender) {
+  const { url, filename, folder, key } = item;
+  if (!url || !filename || !folder) return { ok: false, error: 'Нечего сохранять' };
 
   const saved = await readSaved();
-  if (code && saved[code]) {
-    return { ok: false, duplicate: true, filename: saved[code].filename };
+  if (key && saved[key]) {
+    return { ok: false, duplicate: true, filename: saved[key].filename };
   }
 
   try {
     const id = await chrome.downloads.download({
       url,
-      filename: `${SUBFOLDER}/${filename}`,
+      filename: `${folder}/${filename}`,
       conflictAction: 'uniquify',
       saveAs: false
     });
-    inFlight.set(id, { tabId: sender.tab ? sender.tab.id : null, code, url, filename });
-    await remember(code, filename);
+    inFlight.set(id, { tabId: sender.tab ? sender.tab.id : null, key, url, filename, folder });
+    await remember(key, filename);
     return { ok: true, id, filename };
   } catch (error) {
     return { ok: false, error: String((error && error.message) || error) };
   }
 }
 
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// Пауза между файлами: залп из двадцати запросов Chrome переваривает плохо,
+// а карусель длиннее двадцати слайдов не бывает.
+async function startBatch(items, sender) {
+  const report = { saved: 0, skipped: 0, failed: 0, firstError: null };
+  if (!Array.isArray(items) || !items.length) return report;
+
+  for (let i = 0; i < items.length; i += 1) {
+    const result = await startDownload(items[i], sender);
+    if (result.ok) report.saved += 1;
+    else if (result.duplicate) report.skipped += 1;
+    else {
+      report.failed += 1;
+      if (!report.firstError) report.firstError = result.error || 'загрузка не началась';
+    }
+    if (i < items.length - 1) await wait(BATCH_GAP);
+  }
+
+  return report;
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message || message.kind !== 'download') return undefined;
-  startDownload(message, sender).then(sendResponse);
-  return true;
+  if (!message) return undefined;
+
+  if (message.kind === 'download') {
+    startDownload(message, sender).then(sendResponse);
+    return true;
+  }
+
+  if (message.kind === 'download-batch') {
+    startBatch(message.items, sender).then(sendResponse);
+    return true;
+  }
+
+  return undefined;
 });
 
 // Загрузка могла стартовать и умереть позже: тогда снимаем отметку
@@ -71,14 +105,15 @@ chrome.downloads.onChanged.addListener(async (delta) => {
 
   if (delta.state && delta.state.current === 'interrupted') {
     inFlight.delete(delta.id);
-    await forget(entry.code);
+    await forget(entry.key);
     if (entry.tabId != null) {
       try {
         await chrome.tabs.sendMessage(entry.tabId, {
           kind: 'download-failed',
-          code: entry.code,
+          key: entry.key,
           url: entry.url,
           filename: entry.filename,
+          folder: entry.folder,
           error: (delta.error && delta.error.current) || 'загрузка прервана'
         });
       } catch (error) {

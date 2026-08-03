@@ -374,11 +374,34 @@
     throw new Error(`CDN ответил ${status || 'отказом'} — ${entry.itag}: ${streamFlags(entry)}`);
   }
 
-  async function fetchStream(entry, label) {
+  function totalOf(parts) {
+    let total = 0;
+    for (const part of parts) total += part.length;
+    return total;
+  }
+
+  function concat(parts) {
+    const out = new Uint8Array(totalOf(parts));
+    let at = 0;
+    for (const part of parts) {
+      out.set(part, at);
+      at += part.length;
+    }
+    return out;
+  }
+
+  /** Отдаёт куски как есть: склейка нужна только там, где нужен один массив. */
+  async function deliverParts(parts, filename, folder, key) {
+    if (totalOf(parts) <= MAX_DATA_URL) return deliver(concat(parts), filename, folder, key);
+    saveBlob(new Blob(parts, { type: DOWNLOAD_MIME }), filename);
+    return `Сохранено в корень Загрузок: ${filename}`;
+  }
+
+  async function fetchStreamParts(entry, label) {
     log('поток', entry.itag, '| размер', entry.size, '| параметры адреса:', streamShape(entry));
 
     const total = Number(entry.size) || 0;
-    if (!total) return new Uint8Array(await fetchBytes(entry.url));
+    if (!total) return [new Uint8Array(await fetchBytes(entry.url))];
 
     const parts = [];
     let at = 0;
@@ -391,25 +414,27 @@
       ui.say(`${label}: ${Math.round((at / total) * 100)}%`);
     }
 
-    const out = new Uint8Array(at);
-    let cursor = 0;
-    for (const part of parts) {
-      out.set(part, cursor);
-      cursor += part.length;
-    }
-    return out;
+    return parts;
   }
 
-  // Потоки забираются в память целиком, поэтому у длинных роликов есть
-  // потолок: лучше отказать заранее, чем уронить вкладку на середине.
-  const MAX_STREAM_BYTES = 600 * 1024 * 1024;
+  async function fetchStream(entry, label) {
+    return concat(await fetchStreamParts(entry, label));
+  }
 
-  function checkSize(...entries) {
+  // Потоки читаются в память, поэтому у длинных роликов есть потолок. Он
+  // разный: сборка держит оба потока и результат сразу, а одиночный файл
+  // отдаётся кусками и обходится вдвое дешевле.
+  const MUX_LIMIT = 700 * 1024 * 1024;
+  const SINGLE_LIMIT = 1500 * 1024 * 1024;
+
+  function sizeOf(...entries) {
     let total = 0;
     for (const entry of entries) total += (entry && entry.size) || 0;
-    if (total > MAX_STREAM_BYTES) {
-      throw new Error(`ролик слишком большой (${Math.round(total / 1048576)} МБ)`);
-    }
+    return total;
+  }
+
+  function mb(bytes) {
+    return Math.round(bytes / 1048576);
   }
 
   async function saveStreamVideo(found) {
@@ -430,16 +455,32 @@
     // Прогрессивный формат берётся, только когда он не хуже раздельных:
     // у YouTube это обычно 360p, и молча отдать его вместо 1080p нельзя.
     const canMux = isMp4Stream(picked.video) && isMp4Stream(picked.audio);
-    const progressiveWins = picked.progressive
-      && (!picked.video || (picked.progressive.height || 0) >= (picked.video.height || 0) || !canMux);
+    const pairSize = sizeOf(picked.video, picked.audio);
+    const tooBigToMux = canMux && pairSize > MUX_LIMIT;
+
+    const progressiveWins = picked.progressive && (
+      !picked.video
+      || (picked.progressive.height || 0) >= (picked.video.height || 0)
+      || !canMux
+      || tooBigToMux
+    );
 
     if (progressiveWins) {
-      checkSize(picked.progressive);
-      const bytes = await fetchStream(picked.progressive, 'Качаю ролик');
-      const said = await deliver(bytes, streamName(post, 'mp4'), 'Reels', key);
+      const size = sizeOf(picked.progressive);
+      if (size > SINGLE_LIMIT) throw new Error(`ролик слишком большой (${mb(size)} МБ)`);
+
+      const parts = await fetchStreamParts(picked.progressive, 'Качаю ролик');
+      const said = await deliverParts(parts, streamName(post, 'mp4'), 'Reels', key);
+
+      // Если ушли сюда из-за размера, человек должен знать, что качество не то,
+      // которое было доступно.
+      const note = tooBigToMux
+        ? ` Сборка ${picked.video.height}p заняла бы ${mb(pairSize)} МБ, поэтому сохранил ${picked.progressive.height}p одним файлом.`
+        : '';
+
       clearForce();
       ui.setState('done');
-      ui.say(said);
+      ui.say(said + note);
       return;
     }
 
@@ -451,8 +492,8 @@
 
     // Звука нет вовсе: сохраняем видео как есть и говорим об этом.
     if (!picked.audio) {
-      const bytes = await fetchStream(picked.video, 'Качаю видео');
-      const said = await deliver(bytes, streamName(post, streamExtension(picked.video, 'video')), 'Reels', key);
+      const parts = await fetchStreamParts(picked.video, 'Качаю видео');
+      const said = await deliverParts(parts, streamName(post, streamExtension(picked.video, 'video')), 'Reels', key);
       ui.setState('done');
       ui.say(`${said} Без звука: дорожка не пришла.`);
       return;
@@ -470,7 +511,7 @@
       return;
     }
 
-    checkSize(picked.video, picked.audio);
+    if (pairSize > MUX_LIMIT) throw new Error(`сборка не влезет в память (${mb(pairSize)} МБ)`);
     const video = await fetchStream(picked.video, 'Качаю видео');
     const audio = await fetchStream(picked.audio, 'Качаю звук');
 
@@ -493,11 +534,11 @@
 
     const picked = post.picked;
 
-    const bytes = await fetchStream(picked.audio, 'Качаю звук');
+    const parts = await fetchStreamParts(picked.audio, 'Качаю звук');
     const key = `${extract.downloadKey(post, found.slide)}#audio`;
     const filename = streamName(post, streamExtension(picked.audio, 'audio'));
 
-    const said = await deliver(bytes, filename, 'Audio', key);
+    const said = await deliverParts(parts, filename, 'Audio', key);
     clearForce();
     ui.setState('done');
     ui.say(said);

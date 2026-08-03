@@ -233,15 +233,15 @@
   }
 
   /** Самый крупный вариант: для референсов качество важнее веса файла. */
-  function bestVideo(videos) {
-    if (!Array.isArray(videos) || !videos.length) return null;
+  function bestSource(sources) {
+    if (!Array.isArray(sources) || !sources.length) return null;
     let best = null;
     let bestArea = -1;
-    for (const video of videos) {
-      if (!video || typeof video.url !== 'string' || !video.url) continue;
-      const area = (Number(video.width) || 0) * (Number(video.height) || 0);
+    for (const source of sources) {
+      if (!source || typeof source.url !== 'string' || !source.url) continue;
+      const area = (Number(source.width) || 0) * (Number(source.height) || 0);
       if (area > bestArea) {
-        best = video;
+        best = source;
         bestArea = area;
       }
     }
@@ -266,16 +266,39 @@
     return `${year}-${month}-${day}`;
   }
 
-  function buildFilename(item) {
+  function buildFilename(post, slide) {
     const parts = [];
-    const username = item && item.username ? sanitizeSegment(item.username) : '';
-    const code = item && item.code ? sanitizeSegment(item.code) : '';
+    const username = post && post.username ? sanitizeSegment(post.username) : '';
+    const id = post && (post.code || post.pk) ? sanitizeSegment(post.code || post.pk) : '';
 
     parts.push(username || 'instagram');
-    if (item && item.takenAt) parts.push(formatDate(item.takenAt));
-    if (code) parts.push(code);
+    if (post && post.takenAt) parts.push(formatDate(post.takenAt));
+    if (id) parts.push(id);
 
-    return parts.filter(Boolean).join(' — ') + '.mp4';
+    // Номер нужен только там, где слайдов больше одного: у обычного поста
+    // хвост « — 1» был бы шумом.
+    const many = post && Array.isArray(post.slides) && post.slides.length > 1;
+    if (many && slide && slide.index) parts.push(String(slide.index));
+
+    const source = slide ? bestSource(slide.sources) : null;
+    const extension = extensionFromUrl(source && source.url, slide && slide.kind);
+
+    return parts.filter(Boolean).join(' — ') + '.' + extension;
+  }
+
+  function folderFor(kind) {
+    return kind === 'video' ? 'Reels' : 'Photos';
+  }
+
+  /**
+   * Ключ «уже сохранено». У поста с одним слайдом это просто код, поэтому
+   * ролики, сохранённые прошлой версией, не поедут заново.
+   */
+  function downloadKey(post, slide) {
+    const id = (post && (post.code || post.pk)) || null;
+    if (!id) return null;
+    const many = post && Array.isArray(post.slides) && post.slides.length > 1;
+    return many && slide && slide.index ? `${id}#${slide.index}` : String(id);
   }
 
   /** Код ролика из адреса: /reel/<code>/, /reels/<code>/, /<автор>/reel/<code>/. */
@@ -323,8 +346,10 @@
     mergePosts,
     mediaKeyFromUrl,
     extensionFromUrl,
-    bestVideo,
+    bestSource,
     buildFilename,
+    folderFor,
+    downloadKey,
     sanitizeSegment,
     formatDate,
     codeFromPath,

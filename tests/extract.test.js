@@ -276,25 +276,91 @@ test('незнакомое расширение заменяется умолч�
   assert.strictEqual(extract.extensionFromUrl(null, 'video'), 'mp4');
 });
 
+// Готовый пост нужной длины: экономит повторение в тестах имён и ключей.
+function samplePost(slideCount) {
+  const slides = [];
+  for (let i = 1; i <= slideCount; i += 1) {
+    slides.push({
+      index: i,
+      kind: 'image',
+      sources: [{ url: `https://cdn/v/${i}_n.jpg?stp=p1080x1080`, width: 1080, height: 1080 }]
+    });
+  }
+  return { code: 'DKx9dQ2', pk: '999', username: 'nike', takenAt: 1785542400, slides };
+}
+
 test('выбирает вариант с наибольшим разрешением', () => {
   const posts = extract.collectMedia(sampleResponse());
-  const best = extract.bestVideo(posts[0].slides[0].sources);
-  assert.strictEqual(best.url, 'https://cdn.example/1080.mp4');
+  assert.strictEqual(extract.bestSource(posts[0].slides[0].sources).url, 'https://cdn.example/1080.mp4');
 });
 
-test('bestVideo возвращает null на пустом наборе', () => {
-  assert.strictEqual(extract.bestVideo([]), null);
-  assert.strictEqual(extract.bestVideo(null), null);
+test('bestSource возвращает null на пустом наборе', () => {
+  assert.strictEqual(extract.bestSource([]), null);
+  assert.strictEqual(extract.bestSource(null), null);
 });
 
-test('имя файла складывается из автора, даты и кода', () => {
-  const name = extract.buildFilename({ username: 'nike', takenAt: 1785542400, code: 'DKx9dQ2' });
-  assert.strictEqual(name, 'nike — 2026-08-01 — DKx9dQ2.mp4');
+test('имя одиночного поста без номера слайда', () => {
+  const post = samplePost(1);
+  assert.strictEqual(extract.buildFilename(post, post.slides[0]), 'nike — 2026-08-01 — DKx9dQ2.jpg');
 });
 
-test('имя файла опускает то, чего не знает', () => {
-  assert.strictEqual(extract.buildFilename({ code: 'DKx9dQ2' }), 'instagram — DKx9dQ2.mp4');
-  assert.strictEqual(extract.buildFilename({ username: 'nike' }), 'nike.mp4');
+test('имя слайда карусели с номером', () => {
+  const post = samplePost(7);
+  assert.strictEqual(extract.buildFilename(post, post.slides[2]), 'nike — 2026-08-01 — DKx9dQ2 — 3.jpg');
+});
+
+test('имя ролика не изменилось', () => {
+  const posts = extract.collectMedia(sampleResponse());
+  assert.strictEqual(extract.buildFilename(posts[0], posts[0].slides[0]), 'nike — 2026-08-01 — DKx9dQ2.mp4');
+});
+
+test('имя опускает то, чего не знает', () => {
+  const slide = { index: 1, kind: 'image', sources: [{ url: 'https://cdn/v/x_n.jpg', width: 1080, height: 1080 }] };
+  assert.strictEqual(
+    extract.buildFilename({ code: 'DKx9dQ2', slides: [slide] }, slide),
+    'instagram — DKx9dQ2.jpg'
+  );
+  assert.strictEqual(
+    extract.buildFilename({ username: 'nike', slides: [slide] }, slide),
+    'nike.jpg'
+  );
+});
+
+test('без кода в имя идёт pk', () => {
+  const slide = { index: 1, kind: 'image', sources: [{ url: 'https://cdn/v/x_n.jpg', width: 1080, height: 1080 }] };
+  assert.strictEqual(
+    extract.buildFilename({ code: null, pk: '999', username: 'nike', slides: [slide] }, slide),
+    'nike — 999.jpg'
+  );
+});
+
+test('папка выбирается по типу слайда', () => {
+  assert.strictEqual(extract.folderFor('video'), 'Reels');
+  assert.strictEqual(extract.folderFor('image'), 'Photos');
+  assert.strictEqual(extract.folderFor(undefined), 'Photos');
+});
+
+test('ключ дедупликации одиночного поста — просто код', () => {
+  const post = samplePost(1);
+  assert.strictEqual(extract.downloadKey(post, post.slides[0]), 'DKx9dQ2');
+});
+
+test('ключ дедупликации слайда карусели содержит номер', () => {
+  const post = samplePost(7);
+  assert.strictEqual(extract.downloadKey(post, post.slides[2]), 'DKx9dQ2#3');
+});
+
+test('ключ дедупликации без кода строится на pk', () => {
+  const post = samplePost(1);
+  post.code = null;
+  assert.strictEqual(extract.downloadKey(post, post.slides[0]), '999');
+});
+
+test('без кода и pk ключа нет', () => {
+  const post = samplePost(1);
+  post.code = null;
+  post.pk = null;
+  assert.strictEqual(extract.downloadKey(post, post.slides[0]), null);
 });
 
 test('дата в имени не зависит от часового пояса', () => {

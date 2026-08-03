@@ -221,6 +221,83 @@ test('один пост из двух ответов сливается в са�
   assert.strictEqual(merged.takenAt, 1785542400);
 });
 
+test('читает адрес оригинального звука', () => {
+  const payload = {
+    items: [
+      {
+        code: 'AAA',
+        user: { username: 'nike' },
+        video_versions: [{ url: 'https://cdn/v.mp4', width: 1080, height: 1920 }],
+        clips_metadata: {
+          original_sound_info: {
+            original_audio_title: 'Original audio',
+            progressive_download_url: 'https://cdn/v/sound_n.m4a?x=1'
+          }
+        }
+      }
+    ]
+  };
+  const post = extract.collectMedia(payload)[0];
+  assert.strictEqual(post.audio.url, 'https://cdn/v/sound_n.m4a?x=1');
+  assert.strictEqual(post.audio.title, 'Original audio');
+});
+
+test('читает адрес лицензированной музыки', () => {
+  const payload = {
+    items: [
+      {
+        code: 'BBB',
+        video_versions: [{ url: 'https://cdn/v.mp4', width: 1080, height: 1920 }],
+        clips_metadata: {
+          music_info: {
+            music_asset_info: {
+              title: 'Track',
+              display_artist: 'Artist',
+              progressive_download_url: 'https://cdn/v/track_n.m4a'
+            }
+          }
+        }
+      }
+    ]
+  };
+  const post = extract.collectMedia(payload)[0];
+  assert.strictEqual(post.audio.url, 'https://cdn/v/track_n.m4a');
+  assert.strictEqual(post.audio.title, 'Artist — Track');
+});
+
+test('оригинальный звук предпочитается музыке', () => {
+  const payload = {
+    items: [
+      {
+        code: 'CCC',
+        video_versions: [{ url: 'https://cdn/v.mp4', width: 1080, height: 1920 }],
+        clips_metadata: {
+          original_sound_info: { progressive_download_url: 'https://cdn/v/own_n.m4a' },
+          music_info: { music_asset_info: { progressive_download_url: 'https://cdn/v/track_n.m4a' } }
+        }
+      }
+    ]
+  };
+  assert.strictEqual(extract.collectMedia(payload)[0].audio.url, 'https://cdn/v/own_n.m4a');
+});
+
+test('без метаданных звука поле пустое', () => {
+  const posts = extract.collectMedia(sampleResponse());
+  assert.strictEqual(posts[0].audio, null);
+});
+
+test('слияние постов сохраняет найденный звук', () => {
+  const slides = [{ index: 1, kind: 'video', sources: [{ url: 'https://cdn/v.mp4', width: 1, height: 1 }] }];
+  const withAudio = { code: 'AAA', pk: null, username: null, takenAt: null, audio: { url: 'https://cdn/a.m4a', title: null }, slides };
+  const without = { code: 'AAA', pk: null, username: 'nike', takenAt: 1, audio: null, slides };
+  assert.strictEqual(extract.mergePosts(without, withAudio).audio.url, 'https://cdn/a.m4a');
+  assert.strictEqual(extract.mergePosts(withAudio, without).audio.url, 'https://cdn/a.m4a');
+});
+
+test('звук уходит в свою папку', () => {
+  assert.strictEqual(extract.folderFor('audio'), 'Audio');
+});
+
 test('не находит ничего в ответе без медиа', () => {
   const payload = { data: { user: { username: 'nike' }, items: [{ code: 'abc', image_versions: [] }] } };
   assert.deepStrictEqual(extract.collectMedia(payload), []);

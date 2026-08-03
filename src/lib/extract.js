@@ -132,6 +132,36 @@
     return images;
   }
 
+  function audioTitle(info) {
+    const artist = firstString(info, ['display_artist', 'artist_name']);
+    const title = firstString(info, ['original_audio_title', 'title', 'song_name']);
+    if (artist && title) return `${artist} — ${title}`;
+    return title || artist || null;
+  }
+
+  /**
+   * Прямой адрес звуковой дорожки, если Instagram его дал. Оригинальный звук
+   * предпочтительнее музыки: у лицензированной по этому адресу часто отрывок.
+   */
+  function readAudio(node) {
+    const clips = isObject(node.clips_metadata) ? node.clips_metadata : node;
+
+    const own = isObject(clips.original_sound_info) ? clips.original_sound_info : null;
+    if (own) {
+      const url = firstString(own, ['progressive_download_url']);
+      if (url) return { url, title: audioTitle(own) };
+    }
+
+    const music = isObject(clips.music_info) ? clips.music_info : null;
+    const asset = music && isObject(music.music_asset_info) ? music.music_asset_info : null;
+    if (asset) {
+      const url = firstString(asset, ['progressive_download_url']);
+      if (url) return { url, title: audioTitle(asset) };
+    }
+
+    return null;
+  }
+
   /** Слайды карусели в обеих схемах: новой v1 и старой graphql. */
   function readChildren(node) {
     if (Array.isArray(node.carousel_media)) {
@@ -160,6 +190,7 @@
       pk: readId(node, ['pk', 'id', 'media_id']),
       username: readUsername(node),
       takenAt: readTakenAt(node),
+      audio: readAudio(node),
       slides
     };
   }
@@ -177,6 +208,7 @@
       pk: previous.pk || candidate.pk,
       username: previous.username || candidate.username,
       takenAt: previous.takenAt || candidate.takenAt,
+      audio: previous.audio || candidate.audio,
       slides: previous.slides.length >= candidate.slides.length ? previous.slides : candidate.slides
     };
   }
@@ -287,7 +319,9 @@
   }
 
   function folderFor(kind) {
-    return kind === 'video' ? 'Reels' : 'Photos';
+    if (kind === 'video') return 'Reels';
+    if (kind === 'audio') return 'Audio';
+    return 'Photos';
   }
 
   /**
@@ -344,6 +378,7 @@
   return {
     collectMedia,
     mergePosts,
+    readAudio,
     mediaKeyFromUrl,
     extensionFromUrl,
     bestSource,

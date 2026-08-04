@@ -62,70 +62,10 @@ async function startDownload(item, sender) {
   }
 }
 
-// Адреса потоков видно только браузеру: плеер YouTube ходит в сеть мимо
-// обёрток над fetch, поэтому со стороны страницы их не поймать. Наблюдаем
-// запросы вкладки — ничего не меняя и не блокируя.
-const STREAM_HOSTS = ['*://*.googlevideo.com/*', '*://*.youtube.com/*'];
-const STREAM_LIMIT = 80;
-const streamsByTab = new Map();
-
-// Состояние наблюдателя нужно в отчёте: без него «ноль адресов» одинаково
-// выглядит и когда наблюдение не включилось, и когда оно ничего не видит.
-const watch = { observing: false, seen: 0, error: null };
-
-function rememberStream(tabId, url) {
-  watch.seen += 1;
-  if (tabId < 0) return;
-  const list = streamsByTab.get(tabId) || [];
-  if (list.includes(url)) return;
-  list.push(url);
-  if (list.length > STREAM_LIMIT) list.shift();
-  streamsByTab.set(tabId, list);
-}
-
-try {
-  chrome.webRequest.onBeforeRequest.addListener(
-    (details) => {
-      if (details.url.indexOf('videoplayback') === -1) return;
-      rememberStream(details.tabId, details.url);
-    },
-    { urls: STREAM_HOSTS }
-  );
-  watch.observing = true;
-} catch (error) {
-  watch.error = String((error && error.message) || error);
-  console.warn('[stash] наблюдение за запросами недоступно:', error);
-}
-
-chrome.tabs.onRemoved.addListener((tabId) => streamsByTab.delete(tabId));
-
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-  if (!message) return undefined;
-  const tabId = sender.tab ? sender.tab.id : -1;
-
-  if (message.kind === 'download') {
-    startDownload(message, sender).then(sendResponse);
-    return true;
-  }
-
-  if (message.kind === 'streams') {
-    sendResponse({
-      urls: streamsByTab.get(tabId) || [],
-      observing: watch.observing,
-      seen: watch.seen,
-      error: watch.error
-    });
-    return false;
-  }
-
-  // Ролик сменился: адреса прошлого к нему не относятся.
-  if (message.kind === 'streams-reset') {
-    streamsByTab.delete(tabId);
-    sendResponse({ ok: true });
-    return false;
-  }
-
-  return undefined;
+  if (!message || message.kind !== 'download') return undefined;
+  startDownload(message, sender).then(sendResponse);
+  return true;
 });
 
 // Загрузка могла стартовать и умереть позже: тогда снимаем отметку

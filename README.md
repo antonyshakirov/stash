@@ -12,7 +12,7 @@ single click. A small browser extension for collecting references.**
 ![Browsers](https://img.shields.io/badge/browsers-Chrome%20%C2%B7%20Firefox-555)
 [![Stars](https://img.shields.io/github/stars/antonyshakirov/stash?style=social)](https://github.com/antonyshakirov/stash/stargazers)
 
-**English** · [Русский](docs/readme/README.ru.md)
+[Deutsch](docs/readme/README.de.md) · **English** · [Español](docs/readme/README.es.md) · [Français](docs/readme/README.fr.md) · [Italiano](docs/readme/README.it.md) · [Português](docs/readme/README.pt.md) · [Русский](docs/readme/README.ru.md)
 
 </div>
 

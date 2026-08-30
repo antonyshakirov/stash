@@ -250,14 +250,40 @@
     saveBlob(blob, filename);
   }
 
+  /**
+   * Байты, принадлежащие нашей реальности.
+   *
+   * В Firefox `fetch` из контент-скрипта возвращает буфер, созданный в мире
+   * страницы. Данные в нём настоящие, но `instanceof ArrayBuffer` для него
+   * ложь, а попытка построить на нём типизированный массив упирается в запрет
+   * читать конструктор. Разбор mp4 из-за этого не узнавал вход и объявлял
+   * контейнер битым, хотя контейнер был цел. В Chrome реальность одна, и
+   * ничего этого не происходит.
+   *
+   * structuredClone переносит содержимое, не трогая конструктор чужого
+   * объекта: на выходе буфер уже наш, и дальше всё работает обычным образом.
+   */
+  let bufferPath = null;
+
+  function toOwnBytes(buffer) {
+    if (buffer instanceof ArrayBuffer) {
+      bufferPath = 'свой';
+      return new Uint8Array(buffer);
+    }
+    bufferPath = 'перенесён';
+    return new Uint8Array(structuredClone(buffer));
+  }
+
   async function fetchBytes(url) {
     const response = await fetchFromCdn(url);
     step('чтение тела ответа');
     const buffer = await response.arrayBuffer();
     step('осмотр буфера');
     describeBuffer(buffer);
+    step('перенос буфера к себе');
+    const bytes = toOwnBytes(buffer);
     step('проверка полноты');
-    return checkComplete(response, buffer);
+    return checkComplete(response, bytes);
   }
 
   /**
@@ -306,7 +332,7 @@
     // Осмотр — чистая диагностика, и ронять из-за него сохранение нельзя.
     // Своим отказом он однажды уже притворился отказом скачивания.
     try {
-      const bytes = new Uint8Array(buffer);
+      const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
       const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
       const types = [];
       let at = 0;
@@ -362,6 +388,7 @@
     lines.push('браузер: ' + (globalThis.browser ? 'firefox' : 'chrome'));
     if (lastStep) lines.push(`шаг: ${lastStep}`);
     if (bufferKind) lines.push(`буфер: ${bufferKind}`);
+    if (bufferPath) lines.push(`перенос буфера: ${bufferPath}`);
 
     // Трассировка: сообщение говорит, что случилось, и молчит о том, где.
     // Пути внутри расширения длинные и одинаковые у всех, поэтому оставляем
@@ -394,6 +421,7 @@
     ui.report(null);
     lastProbe = null;
     bufferKind = null;
+    bufferPath = null;
 
     try {
       step('кадр: чтение настроек');
@@ -482,6 +510,7 @@
     ui.report(null);
     lastProbe = null;
     bufferKind = null;
+    bufferPath = null;
 
     try {
       // Без кода и pk ключа нет, и дедупликация выключается: общий ключ
@@ -519,7 +548,7 @@
           path = 'разбор дорожки по прямому адресу';
         } catch (error) {
           path = `прямой адрес как есть (разбор не прошёл: ${error.message})`;
-          bytes = new Uint8Array(buffer);
+          bytes = buffer;
           extension = audioExtension(direct);
         }
       }

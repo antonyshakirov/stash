@@ -161,3 +161,37 @@ test('мусор вместо файла отвергается', () => {
   assert.throws(() => mp4.extractAudio(new Uint8Array([1, 2, 3]).buffer), /битый контейнер/);
   assert.throws(() => mp4.extractAudio(new ArrayBuffer(0)), /битый контейнер/);
 });
+
+// Условие Firefox: контент-скрипт получает от fetch буфер, созданный в другой
+// «реальности». Он настоящий и данные в нём есть, но instanceof его не узнаёт.
+// В Node то же самое воспроизводится отдельным контекстом vm. Ровно на этом
+// разбор объявлял целый контейнер битым.
+test('вход из другой реальности узнаётся, хотя instanceof его отвергает', () => {
+  const vm = require('node:vm');
+  const foreign = vm.runInNewContext('new ArrayBuffer(64)');
+
+  assert.strictEqual(foreign instanceof ArrayBuffer, false, 'условие теста: instanceof обязан лгать');
+  assert.strictEqual(Object.prototype.toString.call(foreign), '[object ArrayBuffer]');
+  assert.strictEqual(foreign.byteLength, 64);
+
+  // Свой mp4 разобрать из пустого буфера нельзя, но провал обязан быть по
+  // существу — «нет moov», — а не «битый контейнер» из-за неузнанного входа.
+  assert.throws(
+    () => mp4.extractAudio(foreign),
+    (error) => error.message !== 'битый контейнер',
+    'вход не должен отвергаться только за чужое происхождение'
+  );
+
+  const foreignView = vm.runInNewContext('new Uint8Array(64)');
+  assert.strictEqual(foreignView instanceof Uint8Array, false);
+  assert.throws(
+    () => mp4.extractAudio(foreignView),
+    (error) => error.message !== 'битый контейнер'
+  );
+});
+
+test('мусор вместо буфера по-прежнему отвергается', () => {
+  for (const bad of [null, undefined, 42, 'строка', {}, { byteLength: 'нет' }]) {
+    assert.throws(() => mp4.extractAudio(bad), /битый контейнер/);
+  }
+});

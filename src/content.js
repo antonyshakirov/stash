@@ -255,6 +255,16 @@
     return checkComplete(response, await response.arrayBuffer());
   }
 
+  // На каком шаге мы находимся. Нужно там, где у ошибки нет стека: защитная
+  // обёртка Firefox бросает объект из чужого мира, и `error.stack` у него
+  // недоступен — сообщение говорит, что случилось, и ничего о том, где.
+  let lastStep = null;
+
+  function step(name) {
+    lastStep = name;
+    log('шаг:', name);
+  }
+
   // Что именно приехало с CDN. Без этого «битый контейнер» неотличим от
   // пустого ответа, обрезанного файла и страницы с ошибкой вместо ролика, и
   // присланный отчёт починить ничего не помогает.
@@ -311,6 +321,7 @@
     }
 
     lines.push('браузер: ' + (globalThis.browser ? 'firefox' : 'chrome'));
+    if (lastStep) lines.push(`шаг: ${lastStep}`);
 
     // Трассировка: сообщение говорит, что случилось, и молчит о том, где.
     // Пути внутри расширения длинные и одинаковые у всех, поэтому оставляем
@@ -344,9 +355,10 @@
     lastProbe = null;
 
     try {
-      const item = found.post && found.slide
-        ? describe(found.post, found.slide, await readFolders())
-        : null;
+      step('кадр: чтение настроек');
+      const folders = await readFolders();
+      step('кадр: выбор источника');
+      const item = found.post && found.slide ? describe(found.post, found.slide, folders) : null;
       if (!item) {
         ui.setState('error');
         ui.say('Источник не найден. Обнови страницу и попробуй снова.');
@@ -355,6 +367,7 @@
       log('сохраняю', item);
 
       const force = forceRequested(item.key);
+      step('кадр: отправка в фон');
       const result = await api.runtime.sendMessage({ kind: 'download', ...item, force });
 
       if (result && result.ok) {
@@ -431,6 +444,7 @@
     try {
       // Без кода и pk ключа нет, и дедупликация выключается: общий ключ
       // «null#audio» роднил бы между собой чужие друг другу ролики.
+      step('звук: ключ и выбор источника');
       const base = extract.downloadKey(found.post, found.slide);
       const key = base ? `${base}#audio` : null;
       const video = found.slide.kind === 'video' ? extract.bestSource(found.slide.sources) : null;
@@ -446,13 +460,17 @@
         // а у лицензированной музыки там ещё и отрывок вместо всей дорожки.
         path = 'разбор ролика';
         ui.say('Вынимаю звук из ролика…');
+        step('звук: скачивание ролика');
         const buffer = await fetchBytes(video.url);
         probeBuffer(buffer);
+        step('звук: разбор mp4');
         bytes = globalThis.StashMp4Audio.extractAudio(buffer);
       } else {
         // Фотопост с прикреплённой музыкой: ролика нет, вынимать не из чего.
+        step('звук: скачивание дорожки');
         const buffer = await fetchBytes(direct);
         probeBuffer(buffer);
+        step('звук: разбор дорожки');
         try {
           bytes = globalThis.StashMp4Audio.extractAudio(buffer);
           path = 'разбор дорожки по прямому адресу';
@@ -468,6 +486,7 @@
       // blob-адрес там создать не из чего. Firefox: сырыми байтами — `data:`
       // его загрузчик не принимает вовсе, зато фон у него обычная страница и
       // blob он сделает сам. Blob, созданный здесь, Firefox тоже отверг бы.
+      step('звук: сборка посылки');
       const item = {
         ...(globalThis.browser
           ? { bytes }
@@ -480,6 +499,7 @@
       log('звук:', path, '| слайд:', found.slide.kind, '| файл:', item.filename, '|', bytes.length, 'байт');
 
       const force = forceRequested(key);
+      step('звук: отправка в фон');
       const result = await api.runtime.sendMessage({ kind: 'download', ...item, force });
 
       if (result && result.ok) {

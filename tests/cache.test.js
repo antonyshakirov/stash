@@ -77,3 +77,40 @@ test('мусор на входе не роняет кэш', () => {
   assert.strictEqual(cache.ingest([null, 42, {}, { slides: [] }]), 0);
   assert.strictEqual(cache.count(), 0);
 });
+
+// Договор между перехватчиком и контент-скриптом. Перехватчик работает в мире
+// страницы и отдаёт данные строкой, потому что живой объект через границу
+// миров в Firefox виден сквозь защитную обёртку. Значит всё, что собирает
+// collectMedia, обязано пережить JSON без потерь — иначе кэш молча пустеет и
+// кнопки не появляются вовсе, как это и случилось в 0.9.2.
+test('данные переживают дорогу через JSON без потерь', () => {
+  const instagram = require('../src/lib/sites/instagram.js');
+  const payload = {
+    items: [
+      {
+        code: 'DKx9dQ2',
+        pk: '3412345678901234567',
+        taken_at: 1785542400,
+        user: { username: 'nike' },
+        video_versions: [{ type: 101, width: 720, height: 1280, url: 'https://cdn/a.mp4' }]
+      }
+    ]
+  };
+
+  const collected = extract.collectMedia(payload, instagram);
+  assert.ok(collected.length, 'разбор ответа обязан что-то найти');
+
+  const throughWire = JSON.parse(JSON.stringify(collected));
+  assert.deepStrictEqual(throughWire, collected, 'JSON не должен ничего терять');
+
+  const cache = cacheModule.create();
+  cache.ingest(throughWire);
+  assert.strictEqual(cache.count(), 1);
+
+  const stored = cache.get('DKx9dQ2');
+  assert.ok(stored, 'пост обязан находиться по коду');
+  assert.strictEqual(stored.username, 'nike');
+  assert.strictEqual(stored.slides.length, 1);
+  assert.strictEqual(stored.slides[0].kind, 'video');
+  assert.ok(extract.bestSource(stored.slides[0].sources), 'источник обязан выбираться');
+});

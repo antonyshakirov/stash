@@ -220,19 +220,19 @@
       </style>
       <div class="wrap" hidden>
         <div class="report" hidden>
-          <div class="report-note">Технические подробности для отчёта об ошибке</div>
+          <div class="report-note">Details for a bug report</div>
           <div class="report-text"></div>
           <div class="report-actions">
-            <button class="report-copy" type="button">Скопировать</button>
-            <button class="report-close" type="button">Закрыть</button>
+            <button class="report-copy" type="button">Copy</button>
+            <button class="report-close" type="button">Close</button>
           </div>
         </div>
         <div class="toast" role="status">
           <span class="toast-text"></span>
-          <button class="toast-more" type="button" hidden>Подробности</button>
+          <button class="toast-more" type="button" hidden>Details</button>
         </div>
         <div class="row">
-          <button class="btn btn-audio" type="button" hidden title="Сохранить только звук">
+          <button class="btn btn-audio" type="button" hidden title="Save audio only">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M9 18V5l10-2v13" />
@@ -240,7 +240,7 @@
               <circle cx="16" cy="16" r="3" />
             </svg>
           </button>
-          <button class="btn btn-one" data-state="idle" type="button" title="Сохранить этот кадр">
+          <button class="btn btn-one" data-state="idle" type="button" title="Save this frame">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                  stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
               <path d="M12 4v12" />
@@ -301,10 +301,10 @@
         try {
           const result = handler();
           if (result && typeof result.catch === 'function') {
-            result.catch((error) => say(`Сбой расширения: ${error && error.message}`));
+            result.catch((error) => say(`Stash error: ${error && error.message}`));
           }
         } catch (error) {
-          say(`Сбой расширения: ${error && error.message}`);
+          say(`Stash error: ${error && error.message}`);
         }
       };
     }
@@ -321,9 +321,9 @@
       const text = reportText.textContent;
       try {
         navigator.clipboard.writeText(text);
-        say('Отчёт скопирован');
+        say('Copied.');
       } catch (error) {
-        say('Скопировать не вышло — выдели текст руками');
+        say('Couldn\u2019t copy. Select the text instead.');
       }
     });
 

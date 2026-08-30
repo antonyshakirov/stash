@@ -16,7 +16,7 @@
   const site = sites.pick(location.hostname);
   if (!site) return;
 
-  if (debugEnabled()) console.log('[stash] перехватчик готов, площадка:', site.id);
+  if (debugEnabled()) console.log('[stash] interceptor ready, site:', site.id);
   if (globalThis.__stashInterceptorReady) return;
   globalThis.__stashInterceptorReady = true;
 
@@ -47,14 +47,14 @@
     } catch (error) {
       // Отказ сериализации раньше уходил в общий catch, и кэш просто оставался
       // пустым: кнопки не появлялись, а причины не было видно нигде.
-      if (debugEnabled()) console.warn('[stash] данные не сериализуются:', error);
+      if (debugEnabled()) console.warn('[stash] payload is not serialisable:', error);
       return;
     }
     try {
       window.postMessage({ source: 'stash', kind: 'media', payload }, window.location.origin);
-      if (debugEnabled()) console.log('[stash] перехвачено медиа:', items.length, items);
+      if (debugEnabled()) console.log('[stash] media captured:', items.length, items);
     } catch (error) {
-      if (debugEnabled()) console.warn('[stash] постинг не прошёл:', error);
+      if (debugEnabled()) console.warn('[stash] posting failed:', error);
     }
   }
 

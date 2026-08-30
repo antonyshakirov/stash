@@ -132,12 +132,12 @@ test('ролик без звуковой дорожки даёт внятную 
   const hdlr = box('hdlr', u32(0), u32(0), enc.encode('vide'), zeros(12), zeros(1));
   const trak = box('trak', box('mdia', hdlr));
   const file = Uint8Array.from([...box('ftyp', enc.encode('isom')), ...box('moov', trak), ...box('mdat', FRAME_A)]);
-  assert.throws(() => mp4.extractAudio(asBuffer(file)), /нет звуковой дорожки/);
+  assert.throws(() => mp4.extractAudio(asBuffer(file)), /no audio track/);
 });
 
 test('файл без moov даёт внятную ошибку', () => {
   const file = Uint8Array.from([...box('ftyp', enc.encode('isom')), ...box('mdat', FRAME_A)]);
-  assert.throws(() => mp4.extractAudio(asBuffer(file)), /нет moov/);
+  assert.throws(() => mp4.extractAudio(asBuffer(file)), /no moov box/);
 });
 
 test('фрагментированный контейнер отвергается', () => {
@@ -148,18 +148,18 @@ test('фрагментированный контейнер отвергаетс
     ...box('moof', zeros(4)),
     ...box('mdat', FRAME_A)
   ]);
-  assert.throws(() => mp4.extractAudio(asBuffer(file)), /фрагментированный/);
+  assert.throws(() => mp4.extractAudio(asBuffer(file)), /fragmented/);
 });
 
 test('звуковая дорожка без таблиц отвергается', () => {
   const trak = box('trak', box('mdia', soundHdlr()));
   const file = Uint8Array.from([...box('ftyp', enc.encode('isom')), ...box('moov', trak), ...box('mdat', FRAME_A)]);
-  assert.throws(() => mp4.extractAudio(asBuffer(file)), /битый контейнер/);
+  assert.throws(() => mp4.extractAudio(asBuffer(file)), /broken container/);
 });
 
 test('мусор вместо файла отвергается', () => {
-  assert.throws(() => mp4.extractAudio(new Uint8Array([1, 2, 3]).buffer), /битый контейнер/);
-  assert.throws(() => mp4.extractAudio(new ArrayBuffer(0)), /битый контейнер/);
+  assert.throws(() => mp4.extractAudio(new Uint8Array([1, 2, 3]).buffer), /broken container/);
+  assert.throws(() => mp4.extractAudio(new ArrayBuffer(0)), /broken container/);
 });
 
 // Условие Firefox: контент-скрипт получает от fetch буфер, созданный в другой
@@ -178,7 +178,7 @@ test('вход из другой реальности узнаётся, хотя
   // существу — «нет moov», — а не «битый контейнер» из-за неузнанного входа.
   assert.throws(
     () => mp4.extractAudio(foreign),
-    (error) => error.message !== 'битый контейнер',
+    (error) => error.message !== 'broken container',
     'вход не должен отвергаться только за чужое происхождение'
   );
 
@@ -186,12 +186,12 @@ test('вход из другой реальности узнаётся, хотя
   assert.strictEqual(foreignView instanceof Uint8Array, false);
   assert.throws(
     () => mp4.extractAudio(foreignView),
-    (error) => error.message !== 'битый контейнер'
+    (error) => error.message !== 'broken container'
   );
 });
 
 test('мусор вместо буфера по-прежнему отвергается', () => {
   for (const bad of [null, undefined, 42, 'строка', {}, { byteLength: 'нет' }]) {
-    assert.throws(() => mp4.extractAudio(bad), /битый контейнер/);
+    assert.throws(() => mp4.extractAudio(bad), /broken container/);
   }
 });

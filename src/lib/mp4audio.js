@@ -31,12 +31,12 @@
    * есть буфер и смещение, у буфера — длина в байтах.
    */
   function asBytes(input) {
-    if (!input || typeof input !== 'object') return fail('битый контейнер');
+    if (!input || typeof input !== 'object') return fail('broken container');
     if (ArrayBuffer.isView(input)) {
       return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
     }
     if (typeof input.byteLength === 'number') return new Uint8Array(input);
-    return fail('битый контейнер');
+    return fail('broken container');
   }
 
   function viewOf(bytes) {
@@ -259,25 +259,25 @@
 
   function extractAudio(input) {
     const bytes = asBytes(input);
-    if (bytes.length < HEADER) fail('битый контейнер');
+    if (bytes.length < HEADER) fail('broken container');
 
     const view = viewOf(bytes);
     const top = readBoxes(bytes, 0, bytes.length);
-    if (!top.length) fail('битый контейнер');
+    if (!top.length) fail('broken container');
 
     if (top.some((box) => box.type === 'moof' || box.type === 'sidx')) {
-      fail('фрагментированный mp4 не поддерживается');
+      fail('fragmented mp4 is not supported');
     }
 
     const moov = top.find((box) => box.type === 'moov');
-    if (!moov) fail('в файле нет moov');
+    if (!moov) fail('no moov box');
 
     const trak = findAudioTrak(bytes, moov);
-    if (!trak) fail('в ролике нет звуковой дорожки');
+    if (!trak) fail('no audio track');
 
     const mdhd = findBox(bytes, ['mdia', 'mdhd'], trak.contentStart, trak.end);
     const stbl = findBox(bytes, ['mdia', 'minf', 'stbl'], trak.contentStart, trak.end);
-    if (!mdhd || !stbl) fail('битый контейнер');
+    if (!mdhd || !stbl) fail('broken container');
 
     const stsd = findBox(bytes, ['stsd'], stbl.contentStart, stbl.end);
     const stts = findBox(bytes, ['stts'], stbl.contentStart, stbl.end);
@@ -285,15 +285,15 @@
     const stsz = findBox(bytes, ['stsz'], stbl.contentStart, stbl.end);
     const stco = findBox(bytes, ['stco'], stbl.contentStart, stbl.end);
     const co64 = findBox(bytes, ['co64'], stbl.contentStart, stbl.end);
-    if (!stsd || !stts || !stsc || !stsz || (!stco && !co64)) fail('битый контейнер');
+    if (!stsd || !stts || !stsc || !stsz || (!stco && !co64)) fail('broken container');
 
     const sizes = readSizes(view, stsz);
     const ranges = sampleRanges(readChunkRuns(view, stsc), readChunkOffsets(view, stco, co64), sizes);
-    if (!ranges.length) fail('в ролике нет звуковой дорожки');
+    if (!ranges.length) fail('no audio track');
 
     let total = 0;
     for (const range of ranges) {
-      if (range.at < 0 || range.at + range.size > bytes.length) fail('битый контейнер');
+      if (range.at < 0 || range.at + range.size > bytes.length) fail('broken container');
       total += range.size;
     }
 

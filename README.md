@@ -22,7 +22,7 @@ whole tool.
 
 ## Install
 
-**Firefox** — [install Stash 0.9.0](https://antonshakirov.com/stash/stash-0.9.0.xpi).
+**Firefox** — [install Stash](https://antonshakirov.com/stash/stash-latest.xpi).
 One click, and it updates itself from there. Signed by Mozilla, so no store
 and no developer mode. Requires Firefox 140 or newer.
 

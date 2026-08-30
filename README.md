@@ -9,7 +9,7 @@ single click. A small browser extension for collecting references.**
 
 [![Latest release](https://img.shields.io/github/v/release/antonyshakirov/stash)](https://github.com/antonyshakirov/stash/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
-![Firefox](https://img.shields.io/badge/Firefox-140%2B-orange)
+![Browsers](https://img.shields.io/badge/browsers-Chrome%20%C2%B7%20Firefox-555)
 [![Stars](https://img.shields.io/github/stars/antonyshakirov/stash?style=social)](https://github.com/antonyshakirov/stash/stargazers)
 
 **English** · [Русский](docs/readme/README.ru.md)
@@ -22,20 +22,30 @@ whole tool.
 
 ## Install
 
-**Firefox** — [install Stash](https://antonshakirov.com/stash/stash-latest.xpi).
-One click, and it updates itself from there. Signed by Mozilla, so no store
-and no developer mode. Requires Firefox 140 or newer.
+### Chrome
 
-**Chrome** — unpacked only, because Chrome does not allow installing
-extensions from outside its store:
+Chrome does not allow installing extensions from outside its own store, and
+that store does not publish extensions of this kind, so the install is manual:
 
-1. Download and unzip the latest release.
+1. Download `stash-chrome-x.y.z.zip` from the
+   [latest release](https://github.com/antonyshakirov/stash/releases/latest)
+   and unzip it.
 2. Open `chrome://extensions` and turn on Developer mode.
-3. Press "Load unpacked" and pick the folder.
+3. Press "Load unpacked" and pick the unzipped folder.
 
-Chrome updates by hand: download the new version and press Reload on the same
-page. Reload any open tabs after installing, since the extension does not
-reach tabs that were already open.
+Updating is manual too. Unpacked extensions never update themselves — Chrome
+has no mechanism for it — so download the new version and press Reload on the
+same page.
+
+### Firefox
+
+[Install Stash](https://antonshakirov.com/stash/stash-latest.xpi) in one
+click. The package is signed by Mozilla, so there is no store and no developer
+mode, and it updates itself from there. Needs Firefox 140 or newer, which is
+any Firefox updated since mid-2026.
+
+Reload any open tabs after installing, since the extension does not reach tabs
+that were already open.
 
 ## How it works
 
@@ -110,7 +120,7 @@ saved it. Platform terms and copyright remain your responsibility.
 ## Build
 
 ```bash
-npm test        # 85 tests
+npm test        # 88 tests
 npm run build   # packages for both browsers into dist/
 ```
 

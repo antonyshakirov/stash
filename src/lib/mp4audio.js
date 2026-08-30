@@ -21,12 +21,21 @@
     throw new Error(message);
   }
 
+  /**
+   * `instanceof` здесь опираться нельзя. Объект, пришедший из другой
+   * «реальности» — а в Firefox `fetch` из контент-скрипта отдаёт именно
+   * такой, — эту проверку не проходит, хотя является ровно тем, чем кажется.
+   * Разбор объявлял тогда контейнер битым, будучи не в силах узнать вход.
+   *
+   * Поэтому смотрим на устройство, а не на происхождение: у представления
+   * есть буфер и смещение, у буфера — длина в байтах.
+   */
   function asBytes(input) {
-    if (input instanceof Uint8Array) return input;
-    if (input instanceof ArrayBuffer) return new Uint8Array(input);
-    if (input && input.buffer instanceof ArrayBuffer) {
+    if (!input || typeof input !== 'object') return fail('битый контейнер');
+    if (ArrayBuffer.isView(input)) {
       return new Uint8Array(input.buffer, input.byteOffset, input.byteLength);
     }
+    if (typeof input.byteLength === 'number') return new Uint8Array(input);
     return fail('битый контейнер');
   }
 

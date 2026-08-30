@@ -69,6 +69,38 @@
     return text;
   }
 
+  /**
+   * Человеческая формулировка для тоста. Технический текст остаётся в отчёте:
+   * он нужен, чтобы чинить, а не тому, кто просто хотел сохранить кадр. Слова
+   * вроде «битый контейнер» человеку не говорят ни что случилось, ни что
+   * делать дальше, и выглядят поломкой самого расширения.
+   *
+   * Общая часть у ошибок разбора одна: сам ролик при этом сохраняется, потому
+   * что видео уходит в загрузку ссылкой и разбора не требует. Это и есть то,
+   * что человеку полезно знать.
+   */
+  const HUMAN_ERRORS = [
+    [/нет звуковой дорожки/, 'В этом ролике нет звука.'],
+    [
+      /фрагментированный mp4/,
+      'Площадка отдала ролик кусками, и звук из него не вынуть. Само видео сохранится.'
+    ],
+    [
+      /битый контейнер|нет moov/,
+      'Не удалось разобрать этот ролик, звук из него не достать. Само видео сохранится.'
+    ],
+    [/CDN ответил/, 'Площадка не отдала файл. Обнови страницу и попробуй снова.']
+  ];
+
+  function humanError(error) {
+    const text = describeError(error);
+    if (text === RELOAD_HINT) return text;
+    for (const [pattern, message] of HUMAN_ERRORS) {
+      if (pattern.test(text)) return message;
+    }
+    return 'Не получилось. Загляни в подробности.';
+  }
+
   // --- приём данных --------------------------------------------------------
 
   window.addEventListener('message', (event) => {
@@ -180,6 +212,34 @@
     return response.arrayBuffer();
   }
 
+  // Что именно приехало с CDN. Без этого «битый контейнер» неотличим от
+  // пустого ответа, обрезанного файла и страницы с ошибкой вместо ролика, и
+  // присланный отчёт починить ничего не помогает.
+  let lastProbe = null;
+
+  function probeBuffer(buffer) {
+    const bytes = new Uint8Array(buffer);
+    const types = [];
+    let at = 0;
+    // Верхний уровень mp4: размер четырьмя байтами, следом четырёхбуквенный
+    // тип. Больше пяти боксов для опознания не нужно.
+    while (at + 8 <= bytes.length && types.length < 5) {
+      const size = new DataView(bytes.buffer, bytes.byteOffset).getUint32(at);
+      const type = String.fromCharCode(bytes[at + 4], bytes[at + 5], bytes[at + 6], bytes[at + 7]);
+      if (!/^[\x20-\x7e]{4}$/.test(type)) break;
+      types.push(type);
+      if (size < 8) break;
+      at += size;
+    }
+    lastProbe = {
+      size: bytes.length,
+      types,
+      // Первые байты пригодятся, когда боксов не нашлось вовсе: по ним видно,
+      // приехал ли HTML вместо файла.
+      head: Array.from(bytes.slice(0, 12), (b) => b.toString(16).padStart(2, '0')).join(' ')
+    };
+  }
+
   /**
    * Отчёт для разбора: всё, что нужно, чтобы понять причину, и ничего
    * лишнего. Отдаётся кнопкой, потому что искать его в инструментах
@@ -201,6 +261,14 @@
       lines.push('пост не опознан');
     }
 
+    if (lastProbe) {
+      const boxes = lastProbe.types.length ? lastProbe.types.join(', ') : 'не опознаны';
+      lines.push(`файл с CDN: ${lastProbe.size} байт | боксы: ${boxes}`);
+      if (!lastProbe.types.length) lines.push(`первые байты: ${lastProbe.head}`);
+    }
+
+    lines.push('браузер: ' + (globalThis.browser ? 'firefox' : 'chrome'));
+
     return lines.join('\n');
   }
 
@@ -218,6 +286,7 @@
     busy = true;
     ui.setState('busy');
     ui.report(null);
+    lastProbe = null;
 
     try {
       const item = found.post && found.slide
@@ -251,7 +320,7 @@
       }
     } catch (error) {
       ui.setState('error');
-      ui.say('Не получилось. Ниже отчёт: нажми «Скопировать» и пришли мне.');
+      ui.say(humanError(error), { sticky: true });
       ui.report(buildReport(error, found));
     } finally {
       busy = false;
@@ -302,6 +371,7 @@
     busy = true;
     ui.setState('busy');
     ui.report(null);
+    lastProbe = null;
 
     try {
       // Без кода и pk ключа нет, и дедупликация выключается: общий ключ
@@ -321,10 +391,13 @@
         // а у лицензированной музыки там ещё и отрывок вместо всей дорожки.
         path = 'разбор ролика';
         ui.say('Вынимаю звук из ролика…');
-        bytes = globalThis.StashMp4Audio.extractAudio(await fetchBytes(video.url));
+        const buffer = await fetchBytes(video.url);
+        probeBuffer(buffer);
+        bytes = globalThis.StashMp4Audio.extractAudio(buffer);
       } else {
         // Фотопост с прикреплённой музыкой: ролика нет, вынимать не из чего.
         const buffer = await fetchBytes(direct);
+        probeBuffer(buffer);
         try {
           bytes = globalThis.StashMp4Audio.extractAudio(buffer);
           path = 'разбор дорожки по прямому адресу';
@@ -365,7 +438,7 @@
       }
     } catch (error) {
       ui.setState('error');
-      ui.say('Звук не сохранён. Ниже отчёт: нажми «Скопировать» и пришли мне.');
+      ui.say(humanError(error), { sticky: true });
       ui.report(buildReport(error, found));
     } finally {
       busy = false;

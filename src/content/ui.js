@@ -156,6 +156,24 @@
           pointer-events: none;
         }
         .toast[data-visible="1"] { opacity: 1; transform: none; }
+        /* Пока висит «Подробности», тост обязан принимать нажатия: без этого
+           кнопка видна и не нажимается. У самого тоста они выключены, чтобы он
+           не перехватывал клики по странице под собой. */
+        .toast:has(.toast-more:not([hidden])) { pointer-events: auto; }
+        .toast-more {
+          display: block;
+          margin-top: 6px;
+          padding: 0;
+          border: 0;
+          background: none;
+          color: rgba(255, 255, 255, 0.72);
+          font: inherit;
+          text-decoration: underline;
+          text-underline-offset: 2px;
+          cursor: pointer;
+        }
+        .toast-more:hover { color: #fff; }
+        .toast-more[hidden] { display: none; }
         .report {
           max-width: 420px;
           background: rgba(20, 20, 22, 0.96);
@@ -168,6 +186,11 @@
           gap: 8px;
         }
         .report[hidden] { display: none; }
+        .report-note {
+          font-size: 11px;
+          line-height: 1.4;
+          color: rgba(255, 255, 255, 0.6);
+        }
         .report-text {
           font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
           font-size: 11px;
@@ -197,13 +220,17 @@
       </style>
       <div class="wrap" hidden>
         <div class="report" hidden>
+          <div class="report-note">Технические подробности для отчёта об ошибке</div>
           <div class="report-text"></div>
           <div class="report-actions">
             <button class="report-copy" type="button">Скопировать</button>
             <button class="report-close" type="button">Закрыть</button>
           </div>
         </div>
-        <div class="toast" role="status"></div>
+        <div class="toast" role="status">
+          <span class="toast-text"></span>
+          <button class="toast-more" type="button" hidden>Подробности</button>
+        </div>
         <div class="row">
           <button class="btn btn-audio" type="button" hidden title="Сохранить только звук">
             <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
@@ -229,6 +256,8 @@
     const one = shadow.querySelector('.btn-one');
     const audio = shadow.querySelector('.btn-audio');
     const toast = shadow.querySelector('.toast');
+    const toastText = shadow.querySelector('.toast-text');
+    const toastMore = shadow.querySelector('.toast-more');
     const report = shadow.querySelector('.report');
     const reportText = shadow.querySelector('.report-text');
     // Именно из круглой кнопки: иконок в разметке теперь несколько.
@@ -251,7 +280,7 @@
     // Обычный тост гаснет сам. Sticky остаётся висеть: так показывается то,
     // что человек обязан прочитать, например просьба перезагрузить страницу.
     function say(text, options) {
-      toast.textContent = text;
+      toastText.textContent = text;
       toast.dataset.visible = '1';
       clearTimeout(toastTimer);
       if (options && options.sticky) return;
@@ -282,6 +311,12 @@
 
     // Отчёт об ошибке отдаётся кнопкой, а не консолью: искать его в
     // инструментах разработчика — не работа человека, который смотрит ленту.
+    // Развернуть отчёт может только человек, который сам этого захотел.
+    toastMore.addEventListener('click', () => {
+      report.hidden = false;
+      toastMore.hidden = true;
+    });
+
     shadow.querySelector('.report-copy').addEventListener('click', () => {
       const text = reportText.textContent;
       try {
@@ -292,8 +327,12 @@
       }
     });
 
+    // «Закрыть» убирает и прилипший тост: иначе сообщение об ошибке осталось
+    // бы висеть после того, как человек с ней уже разобрался.
     shadow.querySelector('.report-close').addEventListener('click', () => {
       report.hidden = true;
+      toast.dataset.visible = '0';
+      if (one.dataset.state !== 'busy') setState('idle');
     });
 
     one.addEventListener('click', press(() => handlers.onSaveOne()));
@@ -341,17 +380,34 @@
       },
       setState,
       say,
-      /** Пустой текст прячет панель: так отчёт не висит от прошлой попытки. */
+      /**
+       * Отчёт больше не разворачивается сам. Человеку, который просто смотрит
+       * ленту, вываленный столбец технических строк ничего не говорит и
+       * выглядит поломкой; ему хватает одной фразы в тосте. Отчёт лежит за
+       * ссылкой «Подробности» — для тех, кто готов его прислать.
+       *
+       * Пустой текст убирает и панель, и ссылку: так отчёт не висит от
+       * прошлой попытки.
+       */
       report(text) {
+        report.hidden = true;
         if (!text) {
-          report.hidden = true;
+          toastMore.hidden = true;
+          reportText.textContent = '';
           return;
         }
         reportText.textContent = text;
-        report.hidden = false;
+        toastMore.hidden = false;
       },
+      /**
+       * Переход на другой пост стирает след прошлого: иначе прилипший тост об
+       * ошибке и раскрытый отчёт ехали бы за человеком по всей ленте.
+       */
       resetTransient() {
         toast.dataset.visible = '0';
+        report.hidden = true;
+        toastMore.hidden = true;
+        reportText.textContent = '';
         if (one.dataset.state !== 'busy') setState('idle');
       }
     };

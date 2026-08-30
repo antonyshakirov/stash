@@ -20,7 +20,7 @@
 
 ## Установка
 
-**Firefox** — [установить Stash 0.9.0](https://antonshakirov.com/stash/stash-0.9.0.xpi).
+**Firefox** — [установить Stash](https://antonshakirov.com/stash/stash-latest.xpi).
 Одно нажатие, дальше обновляется сам. Пакет подписан Mozilla, поэтому ни
 магазин, ни режим разработчика не нужны. Требуется Firefox 140 или новее.
 

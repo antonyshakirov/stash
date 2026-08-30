@@ -18,6 +18,10 @@
   const site = sites.pick(location.hostname);
   if (!site) return;
 
+  // Firefox отдаёт промисы через `browser`, Chrome — через `chrome`. Это
+  // единственное различие между сборками в вызовах API.
+  const api = globalThis.browser || globalThis.chrome;
+
   const MAX_INLINE_JSON = 3 * 1024 * 1024;
   const POLL_INTERVAL = 700;
   const SMALL_SIDE = 1080;
@@ -43,7 +47,7 @@
   // невнятным «Extension context invalidated», и человеку это ничего не даёт.
   function contextAlive() {
     try {
-      return Boolean(chrome.runtime && chrome.runtime.id);
+      return Boolean(api.runtime && api.runtime.id);
     } catch (error) {
       return false;
     }
@@ -51,7 +55,7 @@
 
   function version() {
     try {
-      return chrome.runtime.getManifest().version;
+      return api.runtime.getManifest().version;
     } catch (error) {
       return 'неизвестна';
     }
@@ -116,7 +120,7 @@
   // что человек только что выбрал в соседней вкладке настроек.
   async function readFolders() {
     try {
-      const store = await chrome.storage.local.get(extract.SETTINGS_KEY);
+      const store = await api.storage.local.get(extract.SETTINGS_KEY);
       const settings = store[extract.SETTINGS_KEY];
       return (settings && settings.folders) || null;
     } catch (error) {
@@ -227,7 +231,7 @@
       log('сохраняю', item);
 
       const force = forceRequested(item.key);
-      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item, force });
+      const result = await api.runtime.sendMessage({ kind: 'download', ...item, force });
 
       if (result && result.ok) {
         clearForce();
@@ -341,7 +345,7 @@
       log('звук:', path, '| слайд:', found.slide.kind, '| файл:', item.filename, '|', bytes.length, 'байт');
 
       const force = forceRequested(key);
-      const result = await chrome.runtime.sendMessage({ kind: 'download', ...item, force });
+      const result = await api.runtime.sendMessage({ kind: 'download', ...item, force });
 
       if (result && result.ok) {
         clearForce();
@@ -370,7 +374,7 @@
 
   const ui = uiModule.create({ onSaveOne: saveOne, onSaveAudio: saveAudio });
 
-  chrome.runtime.onMessage.addListener((message) => {
+  api.runtime.onMessage.addListener((message) => {
     if (!message) return;
 
     if (message.kind === 'download-current') {

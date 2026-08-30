@@ -1,6 +1,12 @@
 'use strict';
 
-// Service worker: единственное место, где Stash трогает загрузки и хранилище.
+// Фон: единственное место, где Stash трогает загрузки и хранилище.
+// В Chrome это service worker, в Firefox — обычный фоновый скрипт.
+
+// Единственное различие между сборками в вызовах API: Firefox отдаёт промисы
+// через `browser`, Chrome — через `chrome`. Снято здесь, чтобы дальше по коду
+// об этом можно было не помнить.
+const api = globalThis.browser || globalThis.chrome;
 
 const SAVED_KEY = 'saved';
 
@@ -8,7 +14,7 @@ const SAVED_KEY = 'saved';
 const inFlight = new Map();
 
 async function readSaved() {
-  const store = await chrome.storage.local.get(SAVED_KEY);
+  const store = await api.storage.local.get(SAVED_KEY);
   return store[SAVED_KEY] || {};
 }
 
@@ -16,7 +22,7 @@ async function remember(key, filename) {
   if (!key) return;
   const saved = await readSaved();
   saved[key] = { filename, at: Date.now() };
-  await chrome.storage.local.set({ [SAVED_KEY]: saved });
+  await api.storage.local.set({ [SAVED_KEY]: saved });
 }
 
 async function forget(key) {
@@ -24,7 +30,7 @@ async function forget(key) {
   const saved = await readSaved();
   if (!saved[key]) return;
   delete saved[key];
-  await chrome.storage.local.set({ [SAVED_KEY]: saved });
+  await api.storage.local.set({ [SAVED_KEY]: saved });
 }
 
 // Последний рубеж перед диском: у звука не должно оказаться расширения видео.
@@ -52,7 +58,7 @@ async function startDownload(item, sender) {
   }
 
   try {
-    const id = await chrome.downloads.download({
+    const id = await api.downloads.download({
       url,
       filename: `${folder}/${filename}`,
       conflictAction: 'uniquify',
@@ -66,7 +72,7 @@ async function startDownload(item, sender) {
   }
 }
 
-chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+api.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (!message || message.kind !== 'download') return undefined;
   startDownload(message, sender).then(sendResponse);
   return true;
@@ -74,7 +80,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
 // Загрузка могла стартовать и умереть позже: тогда снимаем отметку
 // «уже сохранён» и просим вкладку попробовать запасной путь.
-chrome.downloads.onChanged.addListener(async (delta) => {
+api.downloads.onChanged.addListener(async (delta) => {
   const entry = inFlight.get(delta.id);
   if (!entry) return;
 
@@ -88,7 +94,7 @@ chrome.downloads.onChanged.addListener(async (delta) => {
     await forget(entry.key);
     if (entry.tabId != null) {
       try {
-        await chrome.tabs.sendMessage(entry.tabId, {
+        await api.tabs.sendMessage(entry.tabId, {
           kind: 'download-failed',
           key: entry.key,
           url: entry.url,
@@ -105,10 +111,10 @@ chrome.downloads.onChanged.addListener(async (delta) => {
 
 // Иконка в панели: второй путь к тому же действию, живёт даже если
 // кнопка поверх плеера не отрисовалась.
-chrome.action.onClicked.addListener(async (tab) => {
+api.action.onClicked.addListener(async (tab) => {
   if (!tab || tab.id == null) return;
   try {
-    await chrome.tabs.sendMessage(tab.id, { kind: 'download-current' });
+    await api.tabs.sendMessage(tab.id, { kind: 'download-current' });
   } catch (error) {
     console.warn('[stash] вкладка не отвечает, обнови страницу Instagram');
   }

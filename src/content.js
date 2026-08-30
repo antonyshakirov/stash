@@ -111,13 +111,33 @@
     forceUntil = 0;
   }
 
-  function describe(post, slide) {
+  // Настройки читаются перед каждым сохранением, а не кэшируются при старте:
+  // чтений столько же, сколько нажатий, зато папка не может разойтись с тем,
+  // что человек только что выбрал в соседней вкладке настроек.
+  async function readFolders() {
+    try {
+      const store = await chrome.storage.local.get(extract.SETTINGS_KEY);
+      const settings = store[extract.SETTINGS_KEY];
+      return (settings && settings.folders) || null;
+    } catch (error) {
+      // Настройки недоступны — это не повод не сохранять файл: folderFor
+      // без них вернёт имена по умолчанию.
+      log('настройки не прочитались:', error);
+      return null;
+    }
+  }
+
+  function describe(post, slide, folders) {
     const source = extract.bestSource(slide.sources);
     if (!source) return null;
     return {
       url: source.url,
       filename: extract.buildFilename(post, slide),
-      folder: extract.folderFor(slide.kind),
+      folder: extract.folderFor(slide.kind, folders),
+      // Тип едет вместе с файлом: по нему background решает про расширение
+      // звука. Поле называется не kind, потому что kind в этом же сообщении
+      // занят словом download и отличает его от прочих.
+      slideKind: extract.folderSlot(slide.kind),
       key: extract.downloadKey(post, slide),
       width: source.width,
       height: source.height
@@ -189,19 +209,23 @@
       return;
     }
 
-    const item = found.post && found.slide ? describe(found.post, found.slide) : null;
-    if (!item) {
-      ui.setState('error');
-      ui.say('Источник не найден. Обнови страницу и попробуй снова.');
-      return;
-    }
-
+    // Заслон ставится до первого await: чтение настроек асинхронное, и между
+    // ним и записью busy иначе помещается второе нажатие — файл уехал бы дважды.
     busy = true;
     ui.setState('busy');
     ui.report(null);
-    log('сохраняю', item);
 
     try {
+      const item = found.post && found.slide
+        ? describe(found.post, found.slide, await readFolders())
+        : null;
+      if (!item) {
+        ui.setState('error');
+        ui.say('Источник не найден. Обнови страницу и попробуй снова.');
+        return;
+      }
+      log('сохраняю', item);
+
       const force = forceRequested(item.key);
       const result = await chrome.runtime.sendMessage({ kind: 'download', ...item, force });
 
@@ -242,7 +266,7 @@
     return extract.buildFilename(post, slide).replace(/\.[^.]+$/, '') + '.' + extension;
   }
 
-  // Всё, что уходит в папку Audio, — звук. Расширение mp4 здесь недопустимо:
+  // Всё, что уходит в звуковую папку, — звук. Расширение mp4 здесь недопустимо:
   // контейнер тот же самый, но по имени и система, и человек считают файл
   // видео. Площадки отдают дорожки именно так, поэтому переименовываем.
   function audioExtension(url) {
@@ -310,7 +334,8 @@
       const item = {
         url: toDataUrl(bytes, DOWNLOAD_MIME),
         filename: audioName(found.post, found.slide, extension),
-        folder: 'Audio',
+        folder: extract.folderFor('audio', await readFolders()),
+        slideKind: 'audio',
         key
       };
       log('звук:', path, '| слайд:', found.slide.kind, '| файл:', item.filename, '|', bytes.length, 'байт');
@@ -321,7 +346,7 @@
       if (result && result.ok) {
         clearForce();
         ui.setState('done');
-        ui.say(`Сохранено: Загрузки/Audio/${result.filename}${force ? ' Это копия.' : ''}`);
+        ui.say(`Сохранено: Загрузки/${item.folder}/${result.filename}${force ? ' Это копия.' : ''}`);
       } else if (result && result.duplicate) {
         armForce(key);
         ui.setState('done');

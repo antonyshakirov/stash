@@ -27,16 +27,20 @@ async function forget(key) {
   await chrome.storage.local.set({ [SAVED_KEY]: saved });
 }
 
-// Последний рубеж перед диском: в папке Audio не должно оказаться файла с
-// расширением видео. Контейнер у m4a и mp4 один и тот же, но по имени и
-// система, и человек считают такой файл роликом.
-function audioSafeName(folder, filename) {
-  return folder === 'Audio' ? filename.replace(/\.mp4$/i, '.m4a') : filename;
+// Последний рубеж перед диском: у звука не должно оказаться расширения видео.
+// Контейнер у m4a и mp4 один и тот же, но по имени и система, и человек
+// считают такой файл роликом.
+//
+// Проверяется тип слайда, а не имя папки: имя папки настраивается человеком,
+// и стоило бы ему переименовать «Saved Audio», как рубеж молча перестал бы
+// срабатывать. Тип приходит из того же места, что и сам файл.
+function audioSafeName(kind, filename) {
+  return kind === 'audio' ? filename.replace(/\.mp4$/i, '.m4a') : filename;
 }
 
 async function startDownload(item, sender) {
   const { url, folder, key, force } = item;
-  const filename = audioSafeName(folder, item.filename);
+  const filename = audioSafeName(item.slideKind, item.filename);
   if (!url || !filename || !folder) return { ok: false, error: 'Нечего сохранять' };
 
   // force приходит со второго нажатия подряд: человек уже знает, что файл

@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Настройки Stash</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --ink: #16171a;
+      --dim: #6b6f76;
+      --line: #dcdee2;
+      --field: #ffffff;
+      --ground: #f7f7f8;
+      --accent: #16171a;
+      --accent-ink: #ffffff;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --ink: #e9eaec;
+        --dim: #9a9ea6;
+        --line: #34363b;
+        --field: #202226;
+        --ground: #17181b;
+        --accent: #e9eaec;
+        --accent-ink: #16171a;
+      }
+    }
+
+    body {
+      margin: 0;
+      padding: 28px 30px 32px;
+      min-width: 420px;
+      background: var(--ground);
+      color: var(--ink);
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    }
+
+    h1 {
+      margin: 0 0 4px;
+      font-size: 17px;
+      font-weight: 600;
+      letter-spacing: -0.01em;
+    }
+
+    .lede {
+      margin: 0 0 24px;
+      max-width: 46ch;
+      color: var(--dim);
+    }
+
+    .row { margin-bottom: 20px; }
+
+    label {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 500;
+    }
+
+    input {
+      width: 100%;
+      box-sizing: border-box;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--field);
+      color: var(--ink);
+      font: inherit;
+    }
+
+    input:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 1px;
+      border-color: transparent;
+    }
+
+    .preview {
+      margin-top: 6px;
+      color: var(--dim);
+      font-size: 12.5px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      overflow-wrap: anywhere;
+    }
+
+    .actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 26px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    button {
+      padding: 8px 16px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: var(--field);
+      color: var(--ink);
+      font: inherit;
+      cursor: pointer;
+    }
+
+    button.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: var(--accent-ink);
+      font-weight: 500;
+    }
+
+    button:focus-visible {
+      outline: 2px solid var(--accent);
+      outline-offset: 2px;
+    }
+
+    #status {
+      margin: 0;
+      min-height: 1.5em;
+      color: var(--dim);
+      font-size: 13px;
+    }
+
+    .note {
+      margin: 22px 0 0;
+      max-width: 52ch;
+      color: var(--dim);
+      font-size: 12.5px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Куда складывать сохранённое</h1>
+  <p class="lede">
+    Папки создаются внутри системной папки загрузок. Оставь поле пустым,
+    чтобы вернуть имя по умолчанию.
+  </p>
+
+  <div class="row">
+    <label for="video">Ролики</label>
+    <input id="video" type="text" spellcheck="false" autocomplete="off">
+    <p class="preview" id="video-preview"></p>
+  </div>
+
+  <div class="row">
+    <label for="image">Картинки</label>
+    <input id="image" type="text" spellcheck="false" autocomplete="off">
+    <p class="preview" id="image-preview"></p>
+  </div>
+
+  <div class="row">
+    <label for="audio">Звук</label>
+    <input id="audio" type="text" spellcheck="false" autocomplete="off">
+    <p class="preview" id="audio-preview"></p>
+  </div>
+
+  <div class="actions">
+    <button id="save" class="primary" type="button">Сохранить</button>
+    <button id="reset" type="button">Вернуть по умолчанию</button>
+    <p id="status" role="status" aria-live="polite"></p>
+  </div>
+
+  <p class="note">
+    Уже открытые вкладки подхватят новые имена сразу, перезагружать их не нужно.
+    Ранее сохранённые файлы остаются там, где лежали.
+  </p>
+
+  <script src="../src/lib/extract.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

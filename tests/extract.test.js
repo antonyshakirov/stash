@@ -296,7 +296,7 @@ test('слияние постов сохраняет найденный звук
 });
 
 test('звук уходит в свою папку', () => {
-  assert.strictEqual(extract.folderFor('audio'), 'Audio');
+  assert.strictEqual(extract.folderFor('audio'), 'Saved Audio');
 });
 
 test('не находит ничего в ответе без медиа', () => {
@@ -421,9 +421,71 @@ test('без кода в имя идёт pk', () => {
 });
 
 test('папка выбирается по типу слайда', () => {
-  assert.strictEqual(extract.folderFor('video'), 'Reels');
-  assert.strictEqual(extract.folderFor('image'), 'Photos');
-  assert.strictEqual(extract.folderFor(undefined), 'Photos');
+  assert.strictEqual(extract.folderFor('video'), 'Saved Reels');
+  assert.strictEqual(extract.folderFor('image'), 'Saved Photos');
+  assert.strictEqual(extract.folderFor(undefined), 'Saved Photos');
+});
+
+test('имя папки из настроек перебивает умолчание', () => {
+  const folders = { video: 'Референсы', image: 'Кадры', audio: 'Дорожки' };
+  assert.strictEqual(extract.folderFor('video', folders), 'Референсы');
+  assert.strictEqual(extract.folderFor('image', folders), 'Кадры');
+  assert.strictEqual(extract.folderFor('audio', folders), 'Дорожки');
+});
+
+test('незаполненная настройка возвращает умолчание, а не пустую папку', () => {
+  assert.strictEqual(extract.folderFor('video', {}), 'Saved Reels');
+  assert.strictEqual(extract.folderFor('video', { video: '' }), 'Saved Reels');
+  assert.strictEqual(extract.folderFor('video', { video: '   ' }), 'Saved Reels');
+  assert.strictEqual(extract.folderFor('video', { video: 42 }), 'Saved Reels');
+  assert.strictEqual(extract.folderFor('video', null), 'Saved Reels');
+});
+
+test('настройка одной папки не задевает соседние', () => {
+  const folders = { audio: 'Дорожки' };
+  assert.strictEqual(extract.folderFor('audio', folders), 'Дорожки');
+  assert.strictEqual(extract.folderFor('video', folders), 'Saved Reels');
+  assert.strictEqual(extract.folderFor('image', folders), 'Saved Photos');
+});
+
+test('слот настроек сводит все не-ролики и не-звук к картинке', () => {
+  assert.strictEqual(extract.folderSlot('video'), 'video');
+  assert.strictEqual(extract.folderSlot('audio'), 'audio');
+  assert.strictEqual(extract.folderSlot('image'), 'image');
+  assert.strictEqual(extract.folderSlot(undefined), 'image');
+  assert.strictEqual(extract.folderSlot('невидаль'), 'image');
+});
+
+test('побег из папки загрузок не проходит', () => {
+  // chrome.downloads отказывает и на `..`, и на абсолютном пути, причём молча:
+  // человек увидел бы несохранившийся файл без объяснения.
+  assert.strictEqual(extract.sanitizeFolder('../../Desktop'), 'Desktop');
+  assert.strictEqual(extract.sanitizeFolder('..'), '');
+  assert.strictEqual(extract.sanitizeFolder('/Users/anton'), 'Users/anton');
+  assert.strictEqual(extract.sanitizeFolder('~/../..'), '~');
+  assert.strictEqual(extract.folderFor('video', { video: '..' }), 'Saved Reels');
+});
+
+test('недопустимые в имени символы вычищаются', () => {
+  assert.strictEqual(extract.sanitizeFolder('Saved: Reels?'), 'Saved- Reels-');
+  assert.strictEqual(extract.sanitizeFolder('  Saved   Reels  '), 'Saved Reels');
+  // Управляющий символ мог бы приехать вставкой из буфера, и в имени файла
+  // он недопустим так же, как двоеточие.
+  assert.strictEqual(extract.sanitizeFolder('Reels\u0000'), 'Reels-');
+  assert.strictEqual(extract.sanitizeFolder('Reels '), 'Reels');
+});
+
+test('вложенность допускается, но не глубже трёх уровней', () => {
+  assert.strictEqual(extract.sanitizeFolder('Refs/Saved Reels'), 'Refs/Saved Reels');
+  assert.strictEqual(extract.sanitizeFolder('a//b'), 'a/b');
+  assert.strictEqual(extract.sanitizeFolder('a/b/c/d/e'), 'a/b/c');
+});
+
+test('не строка вместо имени папки не роняет чистку', () => {
+  assert.strictEqual(extract.sanitizeFolder(undefined), '');
+  assert.strictEqual(extract.sanitizeFolder(null), '');
+  assert.strictEqual(extract.sanitizeFolder(7), '');
+  assert.strictEqual(extract.sanitizeFolder({}), '');
 });
 
 test('ключ дедупликации одиночного поста — просто код', () => {

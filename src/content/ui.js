@@ -232,7 +232,12 @@
     const report = shadow.querySelector('.report');
     const reportText = shadow.querySelector('.report-text');
     // Именно из круглой кнопки: иконок в разметке теперь несколько.
-    const iconMarkup = one.querySelector('.icon').outerHTML;
+    // Держим узлами, а не разметкой: setState зовётся на каждое нажатие, и
+    // пересобирать HTML заново незачем. Заодно это снимает второе присваивание
+    // innerHTML, на которое ругается проверяльщик дополнений Mozilla.
+    const icon = one.querySelector('.icon');
+    const spinner = document.createElement('div');
+    spinner.className = 'spinner';
 
     document.documentElement.appendChild(host);
 
@@ -240,7 +245,7 @@
 
     function setState(state) {
       one.dataset.state = state;
-      one.innerHTML = state === 'busy' ? '<div class="spinner"></div>' : iconMarkup;
+      one.replaceChildren(state === 'busy' ? spinner : icon);
     }
 
     // Обычный тост гаснет сам. Sticky остаётся висеть: так показывается то,

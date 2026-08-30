@@ -1,13 +1,16 @@
 'use strict';
 
 // Страница настроек. Единственная её задача — записать имена папок в
-// chrome.storage.local. Правила чистки и значения по умолчанию берутся из
+// api.storage.local. Правила чистки и значения по умолчанию берутся из
 // того же ядра, что и сохранение, поэтому показанный здесь путь совпадает
 // с тем, куда файл ляжет на самом деле.
 
 (function () {
   const extract = globalThis.StashExtract;
   if (!extract) return;
+
+  // Firefox отдаёт промисы через `browser`, Chrome — через `chrome`.
+  const api = globalThis.browser || globalThis.chrome;
 
   const SLOTS = ['video', 'image', 'audio'];
   // Пример имени файла из README: показывает не только папку, но и то, что
@@ -64,7 +67,7 @@
   }
 
   async function load() {
-    const store = await chrome.storage.local.get(extract.SETTINGS_KEY);
+    const store = await api.storage.local.get(extract.SETTINGS_KEY);
     const settings = store[extract.SETTINGS_KEY];
     const folders = (settings && settings.folders) || {};
     for (const slot of SLOTS) fields[slot].value = folders[slot] || '';
@@ -73,9 +76,9 @@
 
   async function save() {
     const folders = cleaned();
-    const store = await chrome.storage.local.get(extract.SETTINGS_KEY);
+    const store = await api.storage.local.get(extract.SETTINGS_KEY);
     const settings = store[extract.SETTINGS_KEY] || {};
-    await chrome.storage.local.set({ [extract.SETTINGS_KEY]: { ...settings, folders } });
+    await api.storage.local.set({ [extract.SETTINGS_KEY]: { ...settings, folders } });
 
     // Показываем то, что записалось, а не то, что было набрано: чистка могла
     // убрать из имени недопустимое, и молчать об этом нельзя.

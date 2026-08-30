@@ -31,10 +31,19 @@
   }
 
 
+  /**
+   * Данные уезжают строкой, а не объектом. Этот файл работает в мире самой
+   * страницы, а принимает контент-скрипт — в своём. В Firefox объекты через
+   * эту границу видны сквозь защитную обёртку, и обращение к части их свойств
+   * запрещено: разбор падал с «Permission denied to access property».
+   * JSON гарантирует, что на той стороне окажется собственный объект
+   * получателя, и никакой границы у него внутри нет.
+   */
   function publish(items) {
     if (!items || !items.length) return;
     try {
-      window.postMessage({ source: 'stash', kind: 'media', items }, window.location.origin);
+      const payload = JSON.stringify(items);
+      window.postMessage({ source: 'stash', kind: 'media', payload }, window.location.origin);
       if (debugEnabled()) console.log('[stash] перехвачено медиа:', items.length, items);
     } catch (error) {
       /* постинг не должен ломать страницу */

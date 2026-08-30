@@ -107,11 +107,18 @@
 
   // --- приём данных --------------------------------------------------------
 
+  // Перехватчик работает в мире страницы и присылает данные строкой: живой
+  // объект оттуда в Firefox виден сквозь защитную обёртку, и часть его
+  // свойств трогать запрещено. Разбор строки даёт нам собственный объект.
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
     const data = event.data;
     if (!data || data.source !== 'stash' || data.kind !== 'media') return;
-    cache.ingest(data.items);
+    try {
+      cache.ingest(JSON.parse(data.payload));
+    } catch (error) {
+      log('данные от перехватчика не разобрались:', error);
+    }
   });
 
   // Данные, вшитые в HTML при первой загрузке: спасают случай
@@ -304,6 +311,18 @@
     }
 
     lines.push('браузер: ' + (globalThis.browser ? 'firefox' : 'chrome'));
+
+    // Трассировка: сообщение говорит, что случилось, и молчит о том, где.
+    // Пути внутри расширения длинные и одинаковые у всех, поэтому оставляем
+    // только файл и строку.
+    if (error && error.stack) {
+      const frames = String(error.stack)
+        .split('\n')
+        .map((line) => line.trim().replace(/^at\s+/, '').replace(/^.*\/(?=[\w.-]+\.js)/, ''))
+        .filter(Boolean)
+        .slice(0, 4);
+      if (frames.length) lines.push('след: ' + frames.join(' ← '));
+    }
 
     return lines.join('\n');
   }

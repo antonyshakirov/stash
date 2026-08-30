@@ -1,234 +1,162 @@
+<div align="center">
+
+<img src="icons/icon128.png" width="88" alt="Stash icon">
+
 # Stash
 
-Расширение Chrome, которое сохраняет кадры, ролики и звук из Instagram и
-TikTok одним нажатием. Личный инструмент для сбора референсов.
+**Save a frame, a clip or its soundtrack from Instagram and TikTok with a
+single click. A small browser extension for collecting references.**
 
-Раньше назывался Reelbox: имя было привязано к формату одной площадки.
+[![Latest release](https://img.shields.io/github/v/release/antonyshakirov/stash)](https://github.com/antonyshakirov/stash/releases/latest)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+![Firefox](https://img.shields.io/badge/Firefox-140%2B-orange)
+[![Stars](https://img.shields.io/github/stars/antonyshakirov/stash?style=social)](https://github.com/antonyshakirov/stash/stargazers)
 
-## Установка
+**English** · [Русский](docs/readme/README.ru.md)
 
-### Firefox
+</div>
 
-Скачай `stash-<версия>.xpi` и открой его в Firefox: расширение поставится
-одним нажатием и дальше будет обновляться само. Подписывает пакет Mozilla,
-магазин при этом не нужен — раздача идёт со своего сайта.
+Open a post and a round button appears in the corner. Press it, and whatever
+is on screen lands in your Downloads folder under a readable name. That is the
+whole tool.
 
-Нужен Firefox 140 или новее.
+## Install
 
-### Chrome
+**Firefox** — [install Stash 0.9.0](https://antonshakirov.com/stash/stash-0.9.0.xpi).
+One click, and it updates itself from there. Signed by Mozilla, so no store
+and no developer mode. Requires Firefox 140 or newer.
 
-Магазина нет, поэтому только распакованным:
+**Chrome** — unpacked only, because Chrome does not allow installing
+extensions from outside its store:
 
-1. Открой `chrome://extensions`.
-2. Включи «Режим разработчика» (тумблер справа сверху).
-3. Нажми «Загрузить распакованное расширение» и выбери эту папку.
-   Либо просто перетащи папку в окно со списком расширений.
+1. Download and unzip the latest release.
+2. Open `chrome://extensions` and turn on Developer mode.
+3. Press "Load unpacked" and pick the folder.
 
-Обновляется руками: скачать новую версию и нажать «Обновить» на той же
-странице. Chrome не разрешает ставить расширения мимо своего магазина, обойти
-это нельзя.
+Chrome updates by hand: download the new version and press Reload on the same
+page. Reload any open tabs after installing, since the extension does not
+reach tabs that were already open.
 
-После установки обнови уже открытые вкладки: в старые вкладки расширение не
-попадает.
+## How it works
 
-## Как пользоваться
+Open a post or a clip in full. In Instagram that is an address like `/p/…` or
+`/reel/…`, in TikTok `/@author/video/…` or `/@author/photo/…`. A round button
+appears in the bottom-right corner, and a second button with a musical note
+shows up whenever there is sound to take.
 
-Открой пост или ролик целиком. Справа внизу появится круглая кнопка со
-стрелкой, и нажатие сохранит то, что сейчас на экране.
+Frames are saved one at a time. In a carousel, scroll to the slide you want
+and press: exactly that one leaves. Three slides out of seven means three
+presses.
 
-В Instagram это адрес вида `/p/…` или `/reel/…`, в TikTok — `/@автор/video/…`
-или `/@автор/photo/…`.
+There is deliberately no button in the feed or on the profile grid. What sits
+under the cursor there is a thumbnail, and the file would come out worse than
+the original, so open the post first.
 
-Кадры сохраняются по одному. Если это карусель, пролистай до нужного слайда и
-нажми: уедет ровно он. Нужны три слайда из семи — три нажатия.
+Sound is extracted from the clip itself rather than taken from a ready-made
+link, and it comes out exactly as long as the clip. Ten seconds of a song in a
+reel means ten seconds in the file.
 
-В ленте и в сетке профиля кнопки нет. Там под курсором лежит миниатюра, файл из
-неё вышел бы хуже оригинала, поэтому сначала открой пост.
+Saving the same frame twice does not create a duplicate: the extension
+remembers what it already has and says so. Press a second time in a row if you
+want the copy anyway.
 
-У TikTok звук лежит готовым файлом, поэтому кнопка ноты там срабатывает сразу,
-без разбора ролика.
+## Where files go
 
-Куда что ложится:
-
-| Что | Куда | Пример имени |
+| What | Where | Example |
 |---|---|---|
-| Ролики | `Загрузки/Saved Reels` | `nike — 2026-08-01 — DKx9dQ2.mp4` |
-| Картинки | `Загрузки/Saved Photos` | `nike — 2026-08-01 — DKx9dQ2 — 3.jpg` |
-| Звук | `Загрузки/Saved Audio` | `nike — 2026-08-01 — DKx9dQ2.m4a` |
+| Clips | `Downloads/Saved Reels` | `nike — 2026-08-01 — DKx9dQ2.mp4` |
+| Images | `Downloads/Saved Photos` | `nike — 2026-08-01 — DKx9dQ2 — 3.jpg` |
+| Sound | `Downloads/Saved Audio` | `nike — 2026-08-01 — DKx9dQ2.m4a` |
 
-Номер в конце имени — это номер слайда в карусели. У обычного поста его нет.
+The trailing number is the slide index in a carousel. An ordinary post has
+none.
 
-## Настройки
+Folder names are yours to change: right-click the Stash icon in the toolbar
+and choose Options. An empty field restores the default. A slash means
+nesting, so `Refs/Saved Reels` puts one folder inside another. Characters that
+a file system will not accept are cleaned up, and the page shows you the
+result before you save it.
 
-Имена папок меняются: щёлкни по иконке Stash в панели Chrome правой кнопкой и
-выбери «Параметры». Та же страница открывается из `chrome://extensions` по
-кнопке «Параметры расширения».
+## What it does not do
 
-Пустое поле возвращает имя по умолчанию. Слэш в имени означает вложенность,
-`Refs/Saved Reels` создаст папку внутри папки. Недопустимые в имени файла
-символы страница поправит сама и покажет, что получилось.
+Stash makes no requests to Instagram or TikTok of its own. It reads the data
+the page has already received in order to show you the post, and when that
+data is absent it says so instead of going to fetch it. Nothing is sent
+anywhere: the file travels from the platform's CDN to the disk of the same
+person who is looking at the post.
 
-Открытые вкладки подхватывают новые имена сразу. Ранее сохранённые файлы
-остаются там, где лежали: расширение ничего не переносит.
+No signatures or protections are circumvented. No login is automated, no
+account is touched, and no analytics are collected.
 
-Звук ролика сохраняется ровно той длины, что и сам ролик: это его дорожка, а не
-студийный трек. Если в ролике звучит десять секунд песни, в файле будут те же
-десять секунд.
+There is no batch downloading of a whole carousel, a profile or a saved
+collection, no download queue, no history panel and no manual quality picker.
+Sound is copied as it is, without re-encoding.
 
-То же самое делает иконка Stash в панели Chrome. Это запасной путь на
-случай, если Instagram сменит вёрстку и кнопка перестанет отрисовываться.
+YouTube is not supported. It moved to a delivery scheme where file links are
+no longer handed out at all, and supporting it would mean reimplementing their
+own protocol.
 
-Повторное сохранение того же кадра не создаёт дубль: расширение помнит, что
-уже скачано, и говорит об этом. Если копия всё же нужна, нажми второй раз
-подряд — файл сохранится рядом с прежним.
+## Rights and responsibility
 
-## Если что-то пошло не так
+Stash is not affiliated with or endorsed by Instagram, TikTok or Meta. Their
+names appear here only to say where the extension works.
 
-**«Источник не найден»** — обнови страницу и нажми снова. Расширение читает
-данные, которые Instagram присылает при загрузке поста, и после длинной
-навигации по истории их может не оказаться.
+Rights to whatever you save belong to the people who posted it. This extension
+grants no rights to anyone else's material and transfers none. Saving someone
+else's work to look at it and collect references is one thing; republishing,
+reuploading or using it commercially is another, and that is on the person who
+saved it. Platform terms and copyright remain your responsibility.
 
-**Кнопки нет на нужном посте** — проверь, что пост открыт целиком, а не виден
-в ленте или плиткой в профиле. В адресной строке должно быть `/p/…` или
-`/reel/…`.
-
-**«Не понял, что сохранять»** — на экране нет ни ролика, ни достаточно крупной
-картинки. Открой сам пост.
-
-**«640 px — открой пост для полного качества»** — в данных страницы лежит
-только превью. Файл сохранён, но в открытом посте он будет крупнее.
-
-**«Слайд не опознан, сохранил первый»** — Instagram не дал понять, какой слайд
-сейчас на экране. Открой пост целиком, там номер слайда виден по адресу.
-
-**«Звук не сохранён: в ролике нет звуковой дорожки»** — ролик действительно
-немой. **«фрагментированный mp4 не поддерживается»** — Instagram отдал ролик
-кусками, а не одним файлом; сохрани видео целиком.
-
-**«Расширение обновилось. Перезагрузи страницу»** — расширение переустановили
-или обновили, пока вкладка была открыта, и старый скрипт внутри неё потерял
-связь. Нажми ⌘R. Chrome называет это «Extension context invalidated».
-
-**Кнопки нет вообще** — проверь, что расширение включено, и обнови вкладку.
-Пока не отрисовывается кнопка, работает иконка в панели.
-
-**Ничего не помогает** — включи отладку и посмотри консоль:
-
-```js
-localStorage.stashDebug = '1'
-```
-
-После этого расширение печатает в консоль страницы, что именно оно нашло.
-Это же нужно мне, если понадобится чинить разбор данных.
-
-Выключается так:
-
-```js
-localStorage.removeItem('stashDebug')
-```
-
-## Устройство
-
-| Файл | Роль |
-|---|---|
-| `src/lib/extract.js` | Чистые функции: обход JSON, выбор качества, имена файлов. Про площадки не знает. Покрыт тестами |
-| `src/lib/sites/*.js` | Словари площадок: где лежат медиа и как понять, что пост открыт. Покрыты тестами |
-| `src/lib/cache.js` | Кэш вкладки: посты и индекс слайдов по ключу файла. Покрыт тестами |
-| `src/lib/mp4audio.js` | Разбор mp4 и пересборка звуковой дорожки в m4a. Покрыт тестами |
-| `src/interceptor.js` | Работает в контексте страницы, читает копии ответов Instagram |
-| `src/content/target.js` | Открыт ли пост и что сейчас на экране: элемент, пост, номер слайда |
-| `src/content/ui.js` | Кнопки и тост |
-| `src/content.js` | Сведение: приём данных, сохранение, жизненный цикл |
-| `src/background.js` | Загрузки, память о сохранённом, иконка в панели |
-| `options/options.js` | Страница настроек: имена папок. Правила чистки берёт из `extract.js` |
-| `scripts/make-icons.py` | Перерисовка иконок, зависимостей не требует |
-
-Ссылки на файлы берутся из данных, которые страница и так получила для показа
-поста. Дополнительных запросов к Instagram расширение не делает.
-
-Картинка на экране находит свой слайд по последнему сегменту пути CDN-адреса:
-он один и тот же для одного файла в любом размере. Поэтому расширению не нужно
-угадывать по вёрстке, какой слайд сейчас открыт.
-
-Проектные решения и границы:
-
-- [сохранение Reels](docs/superpowers/specs/2026-08-03-stash-design.md)
-- [картинки и карусели](docs/superpowers/specs/2026-08-03-stash-images-design.md)
-- [имена папок и настройки](docs/superpowers/specs/2026-08-30-stash-folder-settings-design.md)
-- [сборка под Firefox и раздача со своего сайта](docs/superpowers/specs/2026-08-30-stash-firefox-port-design.md)
-
-## Тесты
+## Build
 
 ```bash
-npm test
+npm test        # 85 tests
+npm run build   # packages for both browsers into dist/
 ```
 
-## Сборка
+There is a single `manifest.json`, and it is also what Chrome loads unpacked.
+The Firefox variant is derived from it in [scripts/build.py](scripts/build.py)
+rather than kept as a second file, because two manifests would drift apart on
+the first new permission.
 
-```bash
-npm run build
-```
-
-Кладёт в `dist/` два пакета и карту обновлений. Манифест хранится один,
-`manifest.json`, он же лежит распакованным для Chrome; вариант для Firefox
-получается из него правкой в [scripts/build.py](scripts/build.py). Второй
-манифест не заводится намеренно: два разъехались бы на первом же новом
-разрешении.
-
-Firefox-пакет перед подачей проверяется официальным линтером:
+Before submitting to Mozilla the package is checked with the official linter:
 
 ```bash
 npx web-ext lint --source-dir dist/firefox --self-hosted
 ```
 
-Дальше пакет уходит в Mozilla на подпись в режиме unlisted: она подписывает,
-но у себя не публикует. Подписанный `.xpi` кладётся на сайт рядом с
-`updates.json`, и сервер обязан отдавать его с заголовком
-`Content-Type: application/x-xpinstall`, иначе Firefox предложит файл скачать
-вместо установки.
+## Architecture
 
-## Границы
+| File | Role |
+|---|---|
+| `src/lib/extract.js` | Pure functions: JSON traversal, quality choice, file names. Knows nothing about any platform. Covered by tests |
+| `src/lib/sites/*.js` | Platform dictionaries: where the media sits and how to tell a post is open. Covered by tests |
+| `src/lib/cache.js` | Per-tab cache of posts and slide indices |
+| `src/lib/mp4audio.js` | Parses mp4 and repacks the audio track into m4a |
+| `src/interceptor.js` | Runs in the page context and reads copies of responses the page received |
+| `src/content/target.js` | Whether a post is open and what is currently on screen |
+| `src/content/ui.js` | Buttons and toasts |
+| `src/background.js` | Downloads, memory of what is saved, toolbar icon |
+| `options/options.js` | Settings page for folder names |
 
-Сохранение работает только на открытом посте и только по одному кадру за
-нажатие.
+The core knows no platforms: a new one is a new dictionary in
+`src/lib/sites/`, not an edit to the traversal.
 
-YouTube не поддерживается. Он перешёл на доставку, где ссылки на файлы больше
-не выдаются вовсе, и поддержка потребовала бы разбора их собственного
-протокола. Причина записана в
-[спеке](docs/superpowers/specs/2026-08-04-stash-multisite-design.md).
+## Troubleshooting
 
-Не делается: пакетное сохранение карусели, очередь загрузок, история в
-интерфейсе, выбор качества руками, сохранение обложек отдельно от поста,
-скачивание закреплённых альбомов целиком, автообновление, публикация в
-Chrome Web Store.
+**"Source not found"** — reload the page and press again. The extension reads
+data the platform sends when the post loads, and after a long walk through
+history it may be gone.
 
-Подписи и защита не обходятся.
+**No button on the post** — check that the post is open in full rather than
+visible in the feed or as a tile in a profile.
 
-Звук не перекодируется. Ни mp3, ни смена битрейта, ни обрезка: дорожка
-копируется как есть.
+**"Extension updated. Reload the page"** — the extension was reinstalled while
+the tab was open. Press ⌘R.
 
-Имена папок настраиваются, а вот их место — нет: Chrome не разрешает
-расширению писать за пределы папки загрузок.
+Anything else: turn on debugging with `localStorage.stashDebug = '1'` and look
+at the page console.
 
-Запросов к Instagram расширение не делает. Когда данных на странице нет, оно
-говорит об этом, а не идёт за ними.
+## License
 
-## Права и ответственность
-
-Stash не связан с Instagram, TikTok и Meta и ими не одобрен. Названия площадок
-упоминаются только затем, чтобы сказать, где расширение работает.
-
-Расширение читает те данные, которые страница уже получила, чтобы показать
-пост. Своих запросов к площадкам оно не делает, авторизацию и защиту не
-обходит, чужие учётные записи не трогает и ничего никуда не отправляет:
-файл едет с CDN на диск того же человека, который смотрит пост.
-
-Права на сохранённое принадлежат авторам постов. Расширение никаких прав на
-чужой материал не даёт и не передаёт. Сохранение чужой работы для личного
-просмотра и сбора референсов — одно, её публикация, перезалив или
-коммерческое использование — другое, и отвечает за это тот, кто сохранил.
-Правила площадок и авторское право остаются на пользователе.
-
-## Лицензия
-
-MIT, файл [LICENSE](LICENSE). Код открыт, гарантий нет.
+[MIT](LICENSE). Open code, no warranty.

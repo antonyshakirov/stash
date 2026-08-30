@@ -1,6 +1,6 @@
 {
   "name": "stash",
-  "version": "0.9.3",
+  "version": "0.9.4",
   "private": true,
   "description": "Расширение Chrome: сохранение кадров, роликов и звука из Instagram и TikTok",
   "scripts": {

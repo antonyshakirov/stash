@@ -41,12 +41,20 @@
    */
   function publish(items) {
     if (!items || !items.length) return;
+    let payload;
     try {
-      const payload = JSON.stringify(items);
+      payload = JSON.stringify(items);
+    } catch (error) {
+      // Отказ сериализации раньше уходил в общий catch, и кэш просто оставался
+      // пустым: кнопки не появлялись, а причины не было видно нигде.
+      if (debugEnabled()) console.warn('[stash] данные не сериализуются:', error);
+      return;
+    }
+    try {
       window.postMessage({ source: 'stash', kind: 'media', payload }, window.location.origin);
       if (debugEnabled()) console.log('[stash] перехвачено медиа:', items.length, items);
     } catch (error) {
-      /* постинг не должен ломать страницу */
+      if (debugEnabled()) console.warn('[stash] постинг не прошёл:', error);
     }
   }
 

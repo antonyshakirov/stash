@@ -57,11 +57,11 @@
     try {
       return api.runtime.getManifest().version;
     } catch (error) {
-      return 'неизвестна';
+      return 'unknown';
     }
   }
 
-  const RELOAD_HINT = 'Расширение обновилось. Перезагрузи страницу (⌘R).';
+  const RELOAD_HINT = 'Stash was updated. Reload the page.';
 
   function describeError(error) {
     const text = String((error && error.message) || error);
@@ -70,39 +70,22 @@
   }
 
   /**
-   * Человеческая формулировка для тоста. Технический текст остаётся в отчёте:
-   * он нужен, чтобы чинить, а не тому, кто просто хотел сохранить кадр. Слова
-   * вроде «битый контейнер» человеку не говорят ни что случилось, ни что
-   * делать дальше, и выглядят поломкой самого расширения.
+   * Что показать человеку. Причину он не спрашивал и починить её всё равно не
+   * может: ему нужно знать, получилось или нет. Разбор технических слов
+   * остаётся в отчёте, который открывается по желанию и только для того,
+   * чтобы прислать его нам.
    *
-   * Общая часть у ошибок разбора одна: сам ролик при этом сохраняется, потому
-   * что видео уходит в загрузку ссылкой и разбора не требует. Это и есть то,
-   * что человеку полезно знать.
+   * Исключение одно. «В ролике нет звука» — не отказ расширения, а свойство
+   * самого ролика, и человеку это стоит сказать: иначе он будет жать кнопку
+   * снова.
    */
-  const HUMAN_ERRORS = [
-    [/нет звуковой дорожки/, 'В этом ролике нет звука.'],
-    [
-      /фрагментированный mp4/,
-      'Площадка отдала ролик кусками, и звук из него не вынуть. Само видео сохранится.'
-    ],
-    [
-      /битый контейнер|нет moov/,
-      'Не удалось разобрать этот ролик, звук из него не достать. Само видео сохранится.'
-    ],
-    [
-      /приехал не целиком/,
-      'Файл скачался не полностью. Обнови страницу и попробуй снова.'
-    ],
-    [/CDN ответил/, 'Площадка не отдала файл. Обнови страницу и попробуй снова.']
-  ];
+  const NO_AUDIO = /no audio track/;
 
-  function humanError(error) {
+  function humanError(error, fallback) {
     const text = describeError(error);
     if (text === RELOAD_HINT) return text;
-    for (const [pattern, message] of HUMAN_ERRORS) {
-      if (pattern.test(text)) return message;
-    }
-    return 'Не получилось. Загляни в подробности.';
+    if (NO_AUDIO.test(text)) return 'This clip has no audio.';
+    return fallback;
   }
 
   // --- приём данных --------------------------------------------------------
@@ -117,7 +100,7 @@
     try {
       cache.ingest(JSON.parse(data.payload));
     } catch (error) {
-      log('данные от перехватчика не разобрались:', error);
+      log('interceptor payload did not parse:', error);
     }
   });
 
@@ -169,7 +152,7 @@
     } catch (error) {
       // Настройки недоступны — это не повод не сохранять файл: folderFor
       // без них вернёт имена по умолчанию.
-      log('настройки не прочитались:', error);
+      log('settings did not load:', error);
       return null;
     }
   }
@@ -194,7 +177,7 @@
   function smallNote(item) {
     const side = Math.max(Number(item.width) || 0, Number(item.height) || 0);
     if (!side || side >= SMALL_SIDE) return '';
-    return ` (${side} px — открой пост для полного качества)`;
+    return ` (${side} px — open the post for full quality)`;
   }
 
   // Отдаём готовый файл в загрузку прямо из страницы. Подпапку так задать
@@ -223,7 +206,7 @@
    */
   async function fetchFromCdn(url) {
     const response = await fetch(url, { credentials: 'omit', cache: 'no-store' });
-    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
+    if (!response.ok) throw new Error(`CDN responded ${response.status}`);
     return response;
   }
 
@@ -237,7 +220,7 @@
     const got = payload.byteLength !== undefined ? payload.byteLength : payload.size;
     const declared = Number(response.headers.get('content-length'));
     if (declared && got < declared) {
-      throw new Error(`файл приехал не целиком: ${got} из ${declared}`);
+      throw new Error(`incomplete file: ${got} of ${declared}`);
     }
     return payload;
   }
@@ -267,22 +250,22 @@
 
   function toOwnBytes(buffer) {
     if (buffer instanceof ArrayBuffer) {
-      bufferPath = 'свой';
+      bufferPath = 'own';
       return new Uint8Array(buffer);
     }
-    bufferPath = 'перенесён';
+    bufferPath = 'copied';
     return new Uint8Array(structuredClone(buffer));
   }
 
   async function fetchBytes(url) {
     const response = await fetchFromCdn(url);
-    step('чтение тела ответа');
+    step('reading response body');
     const buffer = await response.arrayBuffer();
-    step('осмотр буфера');
+    step('inspecting buffer');
     describeBuffer(buffer);
-    step('перенос буфера к себе');
+    step('copying buffer');
     const bytes = toOwnBytes(buffer);
-    step('проверка полноты');
+    step('checking completeness');
     return checkComplete(response, bytes);
   }
 
@@ -301,7 +284,7 @@
       try {
         facts.push(`${name}=${fn()}`);
       } catch (error) {
-        facts.push(`${name}=ЗАПРЕЩЕНО`);
+        facts.push(`${name}=DENIED`);
       }
     };
     probe('typeof', () => typeof buffer);
@@ -320,7 +303,7 @@
 
   function step(name) {
     lastStep = name;
-    log('шаг:', name);
+    log('step:', name);
   }
 
   // Что именно приехало с CDN. Без этого «битый контейнер» неотличим от
@@ -354,7 +337,7 @@
         head: Array.from(bytes.slice(0, 12), (b) => b.toString(16).padStart(2, '0')).join(' ')
       };
     } catch (error) {
-      lastProbe = { size: -1, types: [], head: `осмотр не прошёл: ${error && error.message}` };
+      lastProbe = { size: -1, types: [], head: `probe failed: ${error && error.message}` };
     }
   }
 
@@ -366,29 +349,29 @@
   function buildReport(error, found) {
     const lines = [];
     lines.push(`Stash ${version()} — ${site.id}`);
-    lines.push(`адрес: ${location.origin}${location.pathname}`);
-    lines.push(`ошибка: ${describeError(error)}`);
-    lines.push(`постов в кэше: ${cache.count()}`);
+    lines.push(`url: ${location.origin}${location.pathname}`);
+    lines.push(`error: ${describeError(error)}`);
+    lines.push(`posts cached: ${cache.count()}`);
 
     if (found && found.post) {
       const post = found.post;
-      lines.push(`пост: ${post.code || post.pk} | автор: ${post.username || 'неизвестен'}`);
-      lines.push(`слайдов: ${post.slides.length} | звук: ${post.audio ? 'есть' : 'нет'}`);
-      if (found.slide) lines.push(`слайд ${found.slide.index}: ${found.slide.kind}`);
+      lines.push(`post: ${post.code || post.pk} | author: ${post.username || 'unknown'}`);
+      lines.push(`slides: ${post.slides.length} | audio: ${post.audio ? 'yes' : 'no'}`);
+      if (found.slide) lines.push(`slide ${found.slide.index}: ${found.slide.kind}`);
     } else {
-      lines.push('пост не опознан');
+      lines.push('post not recognised');
     }
 
     if (lastProbe) {
-      const boxes = lastProbe.types.length ? lastProbe.types.join(', ') : 'не опознаны';
-      lines.push(`файл с CDN: ${lastProbe.size} байт | боксы: ${boxes}`);
-      if (!lastProbe.types.length) lines.push(`первые байты: ${lastProbe.head}`);
+      const boxes = lastProbe.types.length ? lastProbe.types.join(', ') : 'not recognised';
+      lines.push(`file from CDN: ${lastProbe.size} bytes | boxes: ${boxes}`);
+      if (!lastProbe.types.length) lines.push(`first bytes: ${lastProbe.head}`);
     }
 
-    lines.push('браузер: ' + (globalThis.browser ? 'firefox' : 'chrome'));
-    if (lastStep) lines.push(`шаг: ${lastStep}`);
-    if (bufferKind) lines.push(`буфер: ${bufferKind}`);
-    if (bufferPath) lines.push(`перенос буфера: ${bufferPath}`);
+    lines.push('browser: ' + (globalThis.browser ? 'firefox' : 'chrome'));
+    if (lastStep) lines.push(`step: ${lastStep}`);
+    if (bufferKind) lines.push(`buffer: ${bufferKind}`);
+    if (bufferPath) lines.push(`buffer transfer: ${bufferPath}`);
 
     // Трассировка: сообщение говорит, что случилось, и молчит о том, где.
     // Пути внутри расширения длинные и одинаковые у всех, поэтому оставляем
@@ -399,7 +382,7 @@
         .map((line) => line.trim().replace(/^at\s+/, '').replace(/^.*\/(?=[\w.-]+\.js)/, ''))
         .filter(Boolean)
         .slice(0, 4);
-      if (frames.length) lines.push('след: ' + frames.join(' ← '));
+      if (frames.length) lines.push('trace: ' + frames.join(' ← '));
     }
 
     return lines.join('\n');
@@ -410,7 +393,7 @@
     const found = target.current();
     if (!found) {
       ui.setState('error');
-      ui.say('Не понял, что сохранять. Открой сам пост.');
+      ui.say('Open the post to save from it.');
       return;
     }
 
@@ -424,40 +407,40 @@
     bufferPath = null;
 
     try {
-      step('кадр: чтение настроек');
+      step('frame: reading settings');
       const folders = await readFolders();
-      step('кадр: выбор источника');
+      step('frame: picking source');
       const item = found.post && found.slide ? describe(found.post, found.slide, folders) : null;
       if (!item) {
         ui.setState('error');
-        ui.say('Источник не найден. Обнови страницу и попробуй снова.');
+        ui.say('Nothing to save here. Reload the page and try again.');
         return;
       }
-      log('сохраняю', item);
+      log('saving', item);
 
       const force = forceRequested(item.key);
-      step('кадр: отправка в фон');
+      step('frame: sending to background');
       const result = await api.runtime.sendMessage({ kind: 'download', ...item, force });
 
       if (result && result.ok) {
         clearForce();
-        const guess = found.guessed ? ' Слайд не опознан, сохранил первый.' : '';
-        const copy = force ? ' Это копия.' : '';
+        const guess = found.guessed ? ' Slide not recognised, saved the first one.' : '';
+        const copy = force ? ' This is a copy.' : '';
         ui.setState('done');
-        ui.say(`Сохранено: Загрузки/${item.folder}/${result.filename}${smallNote(item)}${guess}${copy}`);
+        ui.say(`Saved to ${item.folder}${smallNote(item)}${guess}${copy}`);
       } else if (result && result.duplicate) {
         armForce(item.key);
         ui.setState('done');
-        ui.say('Этот кадр уже сохранён. Нажми ещё раз, чтобы скачать копию.');
+        ui.say('Already saved. Press again for a copy.');
       } else {
-        log('основной путь не прошёл:', result && result.error);
+        log('main path failed:', result && result.error);
         await fallbackDownload(item.url, item.filename);
         ui.setState('done');
-        ui.say('Сохранено в корень Загрузок (запасной путь)');
+        ui.say('Saved to Downloads.');
       }
     } catch (error) {
       ui.setState('error');
-      ui.say(humanError(error), { sticky: true });
+      ui.say(humanError(error, 'Couldn’t save this.'), { sticky: true });
       ui.report(buildReport(error, found));
     } finally {
       busy = false;
@@ -515,7 +498,7 @@
     try {
       // Без кода и pk ключа нет, и дедупликация выключается: общий ключ
       // «null#audio» роднил бы между собой чужие друг другу ролики.
-      step('звук: ключ и выбор источника');
+      step('audio: key and source');
       const base = extract.downloadKey(found.post, found.slide);
       const key = base ? `${base}#audio` : null;
       const video = found.slide.kind === 'video' ? extract.bestSource(found.slide.sources) : null;
@@ -529,25 +512,25 @@
         // Звук вынимается из самого ролика. Прямой адрес дорожки площадки
         // отдают в контейнере mp4, и файл получался с расширением видео,
         // а у лицензированной музыки там ещё и отрывок вместо всей дорожки.
-        path = 'разбор ролика';
-        ui.say('Вынимаю звук из ролика…');
-        step('звук: скачивание ролика');
+        path = 'clip parse';
+        ui.say('Extracting audio…');
+        step('audio: downloading clip');
         const buffer = await fetchBytes(video.url);
-        step('звук: осмотр файла');
+        step('audio: probing file');
         probeBuffer(buffer);
-        step('звук: разбор mp4');
+        step('audio: parsing mp4');
         bytes = globalThis.StashMp4Audio.extractAudio(buffer);
       } else {
         // Фотопост с прикреплённой музыкой: ролика нет, вынимать не из чего.
-        step('звук: скачивание дорожки');
+        step('audio: downloading track');
         const buffer = await fetchBytes(direct);
         probeBuffer(buffer);
-        step('звук: разбор дорожки');
+        step('audio: parsing track');
         try {
           bytes = globalThis.StashMp4Audio.extractAudio(buffer);
-          path = 'разбор дорожки по прямому адресу';
+          path = 'direct track parse';
         } catch (error) {
-          path = `прямой адрес как есть (разбор не прошёл: ${error.message})`;
+          path = `direct url as is (parse failed: ${error.message})`;
           bytes = buffer;
           extension = audioExtension(direct);
         }
@@ -558,7 +541,7 @@
       // blob-адрес там создать не из чего. Firefox: сырыми байтами — `data:`
       // его загрузчик не принимает вовсе, зато фон у него обычная страница и
       // blob он сделает сам. Blob, созданный здесь, Firefox тоже отверг бы.
-      step('звук: сборка посылки');
+      step('audio: building payload');
       const item = {
         ...(globalThis.browser
           ? { bytes }
@@ -568,31 +551,31 @@
         slideKind: 'audio',
         key
       };
-      log('звук:', path, '| слайд:', found.slide.kind, '| файл:', item.filename, '|', bytes.length, 'байт');
+      log('audio:', path, '| slide:', found.slide.kind, '| file:', item.filename, '|', bytes.length, 'bytes');
 
       const force = forceRequested(key);
-      step('звук: отправка в фон');
+      step('audio: sending to background');
       const result = await api.runtime.sendMessage({ kind: 'download', ...item, force });
 
       if (result && result.ok) {
         clearForce();
         ui.setState('done');
-        ui.say(`Сохранено: Загрузки/${item.folder}/${result.filename}${force ? ' Это копия.' : ''}`);
+        ui.say(`Saved to ${item.folder}${force ? ' This is a copy.' : ''}`);
       } else if (result && result.duplicate) {
         armForce(key);
         ui.setState('done');
-        ui.say('Этот звук уже сохранён. Нажми ещё раз, чтобы скачать копию.');
+        ui.say('Already saved. Press again for a copy.');
       } else {
         // Запасной путь: отдаём файл в загрузку прямо отсюда. Подпапку так
         // не задать, файл ложится в корень Загрузок.
-        log('data:-адрес не прошёл:', result && result.error);
+        log('data: url failed:', result && result.error);
         saveBlob(new Blob([bytes], { type: DOWNLOAD_MIME }), item.filename);
         ui.setState('done');
-        ui.say('Звук сохранён в корень Загрузок (запасной путь)');
+        ui.say('Saved to Downloads.');
       }
     } catch (error) {
       ui.setState('error');
-      ui.say(humanError(error), { sticky: true });
+      ui.say(humanError(error, 'Couldn’t save the audio.'), { sticky: true });
       ui.report(buildReport(error, found));
     } finally {
       busy = false;
@@ -610,15 +593,15 @@
     }
 
     if (message.kind === 'download-failed') {
-      log('загрузка прервана, пробую запасной путь:', message.error);
+      log('download interrupted, trying the fallback:', message.error);
       fallbackDownload(message.url, message.filename)
         .then(() => {
           ui.setState('done');
-          ui.say('Сохранено в корень Загрузок (запасной путь)');
+          ui.say('Saved to Downloads.');
         })
         .catch((error) => {
           ui.setState('error');
-          ui.say(`Не получилось: ${describeError(error)}`);
+          ui.say('Couldn\u2019t save this.');
         });
     }
   });
@@ -654,5 +637,5 @@
   }, POLL_INTERVAL);
 
   scanInlineJson();
-  log('готов, версия', version(), '| площадка:', site.id);
+  log('ready, version', version(), '| site:', site.id);
 })();

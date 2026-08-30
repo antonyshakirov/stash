@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Stash",
-  "version": "0.9.7",
-  "description": "Сохраняет кадры, ролики и звук из Instagram и TikTok одним нажатием.",
+  "version": "0.9.8",
+  "description": "Save a frame, a clip or its soundtrack from Instagram and TikTok with a single click.",
   "permissions": [
     "downloads",
     "storage"
@@ -25,7 +25,7 @@
     "open_in_tab": false
   },
   "action": {
-    "default_title": "Сохранить этот кадр",
+    "default_title": "Save this frame",
     "default_icon": {
       "16": "icons/icon16.png",
       "32": "icons/icon32.png",

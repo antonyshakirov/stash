@@ -89,7 +89,7 @@ function downloadUrlFor(item) {
 async function startDownload(item, sender) {
   const { folder, key, force } = item;
   const filename = audioSafeName(item.slideKind, item.filename);
-  if (!filename || !folder) return { ok: false, error: 'Нечего сохранять' };
+  if (!filename || !folder) return { ok: false, error: 'Nothing to save' };
 
   // force приходит со второго нажатия подряд: человек уже знает, что файл
   // есть, и просит копию. Память о сохранённом бережёт от случайных дублей,
@@ -100,7 +100,7 @@ async function startDownload(item, sender) {
   }
 
   const { url, revoke } = downloadUrlFor(item);
-  if (!url) return { ok: false, error: 'Нечего сохранять' };
+  if (!url) return { ok: false, error: 'Nothing to save' };
 
   try {
     const id = await api.downloads.download({
@@ -170,7 +170,7 @@ api.downloads.onChanged.addListener(async (delta) => {
         url: entry.url,
         filename: entry.filename,
         folder: entry.folder,
-        error: (delta.error && delta.error.current) || 'загрузка прервана'
+        error: (delta.error && delta.error.current) || 'download interrupted'
       });
     } catch (error) {
       /* вкладку закрыли, сообщать некому */
@@ -201,6 +201,6 @@ api.action.onClicked.addListener(async (tab) => {
   try {
     await api.tabs.sendMessage(tab.id, { kind: 'download-current' });
   } catch (error) {
-    console.warn('[stash] вкладка не отвечает, обнови страницу Instagram');
+    console.warn('[stash] tab is not responding, reload the page');
   }
 });

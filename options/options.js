@@ -45,7 +45,7 @@
   function redraw() {
     for (const slot of SLOTS) {
       const folder = extract.folderFor(slot, current());
-      previews[slot].textContent = `Загрузки/${folder}/${SAMPLES[slot]}`;
+      previews[slot].textContent = `Downloads/${folder}/${SAMPLES[slot]}`;
     }
   }
 
@@ -85,21 +85,21 @@
     const changed = SLOTS.some((slot) => (folders[slot] || '') !== fields[slot].value.trim());
     for (const slot of SLOTS) fields[slot].value = folders[slot] || '';
     redraw();
-    say(changed ? 'Сохранено. Имена папок поправлены под правила файловой системы.' : 'Сохранено.');
+    say(changed ? 'Saved. Folder names were adjusted to fit the file system.' : 'Saved.');
   }
 
   async function reset() {
     for (const slot of SLOTS) fields[slot].value = '';
     await save();
-    say('Вернул имена по умолчанию.');
+    say('Defaults restored.');
   }
 
   document.getElementById('save').addEventListener('click', () => {
-    save().catch((error) => say(`Не сохранилось: ${error.message}`));
+    save().catch((error) => say(`Couldn\u2019t save: ${error.message}`));
   });
   document.getElementById('reset').addEventListener('click', () => {
-    reset().catch((error) => say(`Не сохранилось: ${error.message}`));
+    reset().catch((error) => say(`Couldn\u2019t save: ${error.message}`));
   });
 
-  load().catch((error) => say(`Настройки не прочитались: ${error.message}`));
+  load().catch((error) => say(`Couldn\u2019t load settings: ${error.message}`));
 })();

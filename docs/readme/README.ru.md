@@ -10,9 +10,9 @@
 [![Последний выпуск](https://img.shields.io/github/v/release/antonyshakirov/stash)](https://github.com/antonyshakirov/stash/releases/latest)
 [![Лицензия MIT](https://img.shields.io/badge/license-MIT-blue)](../../LICENSE)
 ![Браузеры](https://img.shields.io/badge/browsers-Chrome%20%C2%B7%20Firefox-555)
-
-[Deutsch](README.de.md) · [English](../../README.md) · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Português](README.pt.md) · **Русский**
 [![Звёзды](https://img.shields.io/github/stars/antonyshakirov/stash?style=social)](https://github.com/antonyshakirov/stash/stargazers)
+
+[Bahasa Indonesia](README.id.md) · [Deutsch](README.de.md) · [English](../../README.md) · [Español](README.es.md) · [Français](README.fr.md) · [Italiano](README.it.md) · [Nederlands](README.nl.md) · [Polski](README.pl.md) · [Português](README.pt.md) · [Tiếng Việt](README.vi.md) · [Türkçe](README.tr.md) · **Русский** · [Українська](README.uk.md) · [עברית](README.he.md) · [اردو](README.ur.md) · [العربية](README.ar.md) · [فارسی](README.fa.md) · [हिन्दी](README.hi.md) · [ไทย](README.th.md) · [中文](README.zh.md) · [日本語](README.ja.md) · [한국어](README.ko.md)
 
 </div>
 

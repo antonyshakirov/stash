@@ -463,8 +463,15 @@
         }
       }
 
+      // Как отдать фону файл, собранный здесь, у браузеров разное.
+      // Chrome: `data:`-адресом, потому что в его service worker нет DOM и
+      // blob-адрес там создать не из чего. Firefox: сырыми байтами — `data:`
+      // его загрузчик не принимает вовсе, зато фон у него обычная страница и
+      // blob он сделает сам. Blob, созданный здесь, Firefox тоже отверг бы.
       const item = {
-        url: toDataUrl(bytes, DOWNLOAD_MIME),
+        ...(globalThis.browser
+          ? { bytes }
+          : { url: toDataUrl(bytes, DOWNLOAD_MIME) }),
         filename: audioName(found.post, found.slide, extension),
         folder: extract.folderFor('audio', await readFolders()),
         slideKind: 'audio',

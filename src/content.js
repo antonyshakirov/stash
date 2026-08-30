@@ -252,7 +252,39 @@
 
   async function fetchBytes(url) {
     const response = await fetchFromCdn(url);
-    return checkComplete(response, await response.arrayBuffer());
+    step('чтение тела ответа');
+    const buffer = await response.arrayBuffer();
+    step('осмотр буфера');
+    describeBuffer(buffer);
+    step('проверка полноты');
+    return checkComplete(response, buffer);
+  }
+
+  /**
+   * Чем оказался буфер от fetch. В Firefox контент-скрипт и страница живут в
+   * разных «реальностях», и объект оттуда не проходит проверку instanceof, а
+   * обращение к его конструктору запрещено — обе ошибки, которые мы видели,
+   * объясняются этим. Проверки поштучно и каждая в своём try: любая из них
+   * может оказаться той самой запрещённой.
+   */
+  let bufferKind = null;
+
+  function describeBuffer(buffer) {
+    const facts = [];
+    const probe = (name, fn) => {
+      try {
+        facts.push(`${name}=${fn()}`);
+      } catch (error) {
+        facts.push(`${name}=ЗАПРЕЩЕНО`);
+      }
+    };
+    probe('typeof', () => typeof buffer);
+    probe('isArrayBuffer', () => buffer instanceof ArrayBuffer);
+    probe('isView', () => ArrayBuffer.isView(buffer));
+    probe('byteLength', () => buffer.byteLength);
+    probe('tag', () => Object.prototype.toString.call(buffer));
+    probe('ctor', () => buffer.constructor && buffer.constructor.name);
+    bufferKind = facts.join(' ');
   }
 
   // На каком шаге мы находимся. Нужно там, где у ошибки нет стека: защитная
@@ -271,26 +303,33 @@
   let lastProbe = null;
 
   function probeBuffer(buffer) {
-    const bytes = new Uint8Array(buffer);
-    const types = [];
-    let at = 0;
-    // Верхний уровень mp4: размер четырьмя байтами, следом четырёхбуквенный
-    // тип. Больше пяти боксов для опознания не нужно.
-    while (at + 8 <= bytes.length && types.length < 5) {
-      const size = new DataView(bytes.buffer, bytes.byteOffset).getUint32(at);
-      const type = String.fromCharCode(bytes[at + 4], bytes[at + 5], bytes[at + 6], bytes[at + 7]);
-      if (!/^[\x20-\x7e]{4}$/.test(type)) break;
-      types.push(type);
-      if (size < 8) break;
-      at += size;
+    // Осмотр — чистая диагностика, и ронять из-за него сохранение нельзя.
+    // Своим отказом он однажды уже притворился отказом скачивания.
+    try {
+      const bytes = new Uint8Array(buffer);
+      const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.length);
+      const types = [];
+      let at = 0;
+      // Верхний уровень mp4: размер четырьмя байтами, следом четырёхбуквенный
+      // тип. Больше пяти боксов для опознания не нужно.
+      while (at + 8 <= bytes.length && types.length < 5) {
+        const size = view.getUint32(at);
+        const type = String.fromCharCode(bytes[at + 4], bytes[at + 5], bytes[at + 6], bytes[at + 7]);
+        if (!/^[\x20-\x7e]{4}$/.test(type)) break;
+        types.push(type);
+        if (size < 8) break;
+        at += size;
+      }
+      lastProbe = {
+        size: bytes.length,
+        types,
+        // Первые байты пригодятся, когда боксов не нашлось вовсе: по ним видно,
+        // приехал ли HTML вместо файла.
+        head: Array.from(bytes.slice(0, 12), (b) => b.toString(16).padStart(2, '0')).join(' ')
+      };
+    } catch (error) {
+      lastProbe = { size: -1, types: [], head: `осмотр не прошёл: ${error && error.message}` };
     }
-    lastProbe = {
-      size: bytes.length,
-      types,
-      // Первые байты пригодятся, когда боксов не нашлось вовсе: по ним видно,
-      // приехал ли HTML вместо файла.
-      head: Array.from(bytes.slice(0, 12), (b) => b.toString(16).padStart(2, '0')).join(' ')
-    };
   }
 
   /**
@@ -322,6 +361,7 @@
 
     lines.push('браузер: ' + (globalThis.browser ? 'firefox' : 'chrome'));
     if (lastStep) lines.push(`шаг: ${lastStep}`);
+    if (bufferKind) lines.push(`буфер: ${bufferKind}`);
 
     // Трассировка: сообщение говорит, что случилось, и молчит о том, где.
     // Пути внутри расширения длинные и одинаковые у всех, поэтому оставляем
@@ -353,6 +393,7 @@
     ui.setState('busy');
     ui.report(null);
     lastProbe = null;
+    bufferKind = null;
 
     try {
       step('кадр: чтение настроек');
@@ -440,6 +481,7 @@
     ui.setState('busy');
     ui.report(null);
     lastProbe = null;
+    bufferKind = null;
 
     try {
       // Без кода и pk ключа нет, и дедупликация выключается: общий ключ
@@ -462,6 +504,7 @@
         ui.say('Вынимаю звук из ролика…');
         step('звук: скачивание ролика');
         const buffer = await fetchBytes(video.url);
+        step('звук: осмотр файла');
         probeBuffer(buffer);
         step('звук: разбор mp4');
         bytes = globalThis.StashMp4Audio.extractAudio(buffer);

@@ -89,6 +89,10 @@
       /битый контейнер|нет moov/,
       'Не удалось разобрать этот ролик, звук из него не достать. Само видео сохранится.'
     ],
+    [
+      /приехал не целиком/,
+      'Файл скачался не полностью. Обнови страницу и попробуй снова.'
+    ],
     [/CDN ответил/, 'Площадка не отдала файл. Обнови страницу и попробуй снова.']
   ];
 
@@ -199,17 +203,49 @@
     setTimeout(() => URL.revokeObjectURL(objectUrl), 15000);
   }
 
+  /**
+   * Единственное место, где расширение само тянет файл с CDN.
+   *
+   * `cache: 'no-store'` здесь не про свежесть, а про целостность. Пока человек
+   * смотрит ролик, плеер тянет его кусками через Range-запросы, и в кэше
+   * браузера остаётся неполная запись. Firefox отдаёт этот обрезок обычному
+   * `fetch` без Range: боксы в нём читаются, а куски звука выходят за конец
+   * файла — разбор падал на «битом контейнере», хотя контейнер был цел, просто
+   * приехал не весь. Chrome с медиа-кэшем ведёт себя иначе, поэтому там всё
+   * работало и разницу было видно только между браузерами.
+   */
+  async function fetchFromCdn(url) {
+    const response = await fetch(url, { credentials: 'omit', cache: 'no-store' });
+    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
+    return response;
+  }
+
+  /**
+   * Обрезанный ответ опаснее ошибки: молча сохранённый неполный файл человек
+   * заметит не сразу. Если CDN сказал длину, сверяем с ней и говорим прямо.
+   */
+  function checkComplete(response, payload) {
+    // ArrayBuffer меряется byteLength, Blob — size: через эту функцию проходят
+    // оба, и путать их нельзя.
+    const got = payload.byteLength !== undefined ? payload.byteLength : payload.size;
+    const declared = Number(response.headers.get('content-length'));
+    if (declared && got < declared) {
+      throw new Error(`файл приехал не целиком: ${got} из ${declared}`);
+    }
+    return payload;
+  }
+
   // Запасной путь: тянем файл внутри страницы и сохраняем его отсюда.
   async function fallbackDownload(url, filename) {
-    const response = await fetch(url, { credentials: 'omit' });
-    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
-    saveBlob(await response.blob(), filename);
+    const response = await fetchFromCdn(url);
+    const blob = await response.blob();
+    checkComplete(response, blob);
+    saveBlob(blob, filename);
   }
 
   async function fetchBytes(url) {
-    const response = await fetch(url, { credentials: 'omit' });
-    if (!response.ok) throw new Error(`CDN ответил ${response.status}`);
-    return response.arrayBuffer();
+    const response = await fetchFromCdn(url);
+    return checkComplete(response, await response.arrayBuffer());
   }
 
   // Что именно приехало с CDN. Без этого «битый контейнер» неотличим от

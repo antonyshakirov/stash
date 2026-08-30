@@ -21,6 +21,19 @@
     'jpg', 'jpeg', 'png', 'webp', 'heic',
     'mp4', 'm4a', 'aac', 'mp3', 'webm', 'weba', 'opus'
   ]);
+  // Имена папок настраиваются, поэтому здесь лежит запас по умолчанию, а не
+  // единственная правда. Слово Saved нужно, чтобы в Загрузках было видно:
+  // это сохранённое со стороны, а не снятое самим человеком.
+  const DEFAULT_FOLDERS = Object.freeze({
+    video: 'Saved Reels',
+    image: 'Saved Photos',
+    audio: 'Saved Audio'
+  });
+  // Ключ настроек в chrome.storage.local. Лежит здесь, чтобы контент-скрипт и
+  // страница настроек не разошлись в написании.
+  const SETTINGS_KEY = 'settings';
+  // Глубже трёх уровней папка перестаёт быть удобством и начинает прятать файлы.
+  const MAX_FOLDER_DEPTH = 3;
 
   // --- мелочь, нужная и здесь, и словарям площадок ------------------------
 
@@ -238,10 +251,37 @@
     return parts.filter(Boolean).join(' — ') + '.' + extension;
   }
 
-  function folderFor(kind) {
-    if (kind === 'video') return 'Reels';
-    if (kind === 'audio') return 'Audio';
-    return 'Photos';
+  /**
+   * Слот настроек по типу слайда. Всё, что не ролик и не звук, — картинка:
+   * так же считает и страница настроек, поэтому слотов ровно три.
+   */
+  function folderSlot(kind) {
+    if (kind === 'video') return 'video';
+    if (kind === 'audio') return 'audio';
+    return 'image';
+  }
+
+  /**
+   * Имя папки приходит от человека и уходит прямо в chrome.downloads, где
+   * абсолютный путь и `..` дают отказ загрузки без внятной причины. Поэтому
+   * путь разбирается на сегменты, каждый чистится теми же правилами, что и
+   * имя файла, а пустой ответ означает «своего имени нет» — тогда folderFor
+   * берёт значение по умолчанию, и папка не может оказаться безымянной.
+   */
+  function sanitizeFolder(value) {
+    if (typeof value !== 'string') return '';
+    return value
+      .split('/')
+      .map(sanitizeSegment)
+      .filter(Boolean)
+      .slice(0, MAX_FOLDER_DEPTH)
+      .join('/');
+  }
+
+  function folderFor(kind, folders) {
+    const slot = folderSlot(kind);
+    const custom = folders ? sanitizeFolder(folders[slot]) : '';
+    return custom || DEFAULT_FOLDERS[slot];
   }
 
   /**
@@ -266,6 +306,10 @@
     bestSource,
     buildFilename,
     folderFor,
+    folderSlot,
+    sanitizeFolder,
+    DEFAULT_FOLDERS,
+    SETTINGS_KEY,
     downloadKey,
     mediaKeyFromUrl,
     extensionFromUrl,

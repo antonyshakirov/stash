@@ -1,0 +1,8 @@
+{
+  "name": "stash-own-check-tools",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "web-ext": "10.6.0"
+  }
+}

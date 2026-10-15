@@ -1,0 +1,87 @@
+{
+  "schema": 1,
+  "project": "stash",
+  "steps": [
+    {
+      "id": "runner-regressions",
+      "cwd": ".",
+      "command": "{{node}}",
+      "args": [
+        "--test",
+        "scripts/own-ci/engine.test.mjs"
+      ],
+      "network": false,
+      "timeoutMs": 600000,
+      "tapMinimum": 26
+    },
+    {
+      "id": "extension-unit",
+      "cwd": ".",
+      "command": "{{node}}",
+      "args": [
+        "--test",
+        "tests/cache.test.js",
+        "tests/extract.test.js",
+        "tests/mp4audio.test.js",
+        "tests/tiktok.test.js"
+      ],
+      "network": false,
+      "timeoutMs": 600000,
+      "tapMinimum": 88
+    },
+    {
+      "id": "browser-packages",
+      "cwd": ".",
+      "command": "python3",
+      "args": [
+        "scripts/build.py"
+      ],
+      "network": false,
+      "timeoutMs": 600000
+    },
+    {
+      "id": "locked-linter",
+      "cwd": "scripts/own-ci/tools",
+      "command": "{{npm}}",
+      "args": [
+        "ci",
+        "--no-audit",
+        "--fund=false",
+        "--prefer-offline"
+      ],
+      "network": true,
+      "timeoutMs": 600000
+    },
+    {
+      "id": "firefox-lint",
+      "cwd": ".",
+      "command": "{{node}}",
+      "args": [
+        "scripts/own-ci/tools/node_modules/web-ext/bin/web-ext.js",
+        "lint",
+        "--source-dir",
+        "dist/firefox",
+        "--self-hosted",
+        "--warnings-as-errors"
+      ],
+      "network": false,
+      "timeoutMs": 600000
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "dist/stash-chrome-0.9.8.zip",
+      "type": "file"
+    },
+    {
+      "path": "dist/stash-firefox-0.9.8.zip",
+      "type": "file"
+    },
+    {
+      "path": "dist/updates.json",
+      "type": "json"
+    }
+  ],
+  "ports": [],
+  "env": {}
+}

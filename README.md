@@ -170,3 +170,7 @@ at the page console.
 ## License
 
 [MIT](LICENSE). Open code, no warranty.
+
+## Own checks
+
+`./scripts/check-release` runs the full required checks; `./scripts/check-release --verify` verifies fresh evidence for the exact commit. See [the check contract](scripts/own-ci/README.md). GitHub Actions is not required.

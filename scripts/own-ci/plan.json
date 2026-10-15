@@ -12,7 +12,7 @@
       ],
       "network": false,
       "timeoutMs": 600000,
-      "tapMinimum": 22
+      "tapMinimum": 26
     },
     {
       "id": "extension-unit",
@@ -46,7 +46,8 @@
       "args": [
         "ci",
         "--no-audit",
-        "--fund=false"
+        "--fund=false",
+        "--prefer-offline"
       ],
       "network": true,
       "timeoutMs": 600000

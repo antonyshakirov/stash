@@ -75,7 +75,36 @@ export async function assertPortFree(port) {
   }
 }
 
-function stopGroup(pid, signal) { try { process.kill(-pid, signal); } catch (e) { if (e.code !== 'ESRCH') throw e; } }
+export function processGroupHasNoLiveMembers(output, pgid) {
+  if (!Number.isSafeInteger(pgid) || pgid < 1) throw new Error('Invalid owned process group');
+  let live = false;
+  for (const line of output.split('\n').filter(line => line.trim())) {
+    const row = /^\s*\d+\s+(\d+)\s+\d+\s+(\S+)\s*$/.exec(line);
+    if (!row) throw new Error('Cannot verify process group state');
+    if (Number(row[1]) === pgid && !row[2].startsWith('Z')) live = true;
+  }
+  return !live;
+}
+export function confirmGroupExit(pgid, {
+  snapshot = () => execFileSync('/bin/ps', ['-axo', 'pid=,pgid=,uid=,stat='], { encoding: 'utf8', env: gitEnv }),
+  pause = () => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50),
+} = {}) {
+  for (let attempt = 0; attempt < 20; attempt++) {
+    if (processGroupHasNoLiveMembers(snapshot(), pgid)) return true;
+    pause();
+  }
+  return false;
+}
+function stopGroup(pid, signal) {
+  try { process.kill(-pid, signal); }
+  catch (error) {
+    if (error.code === 'ESRCH') return;
+    if (error.code === 'EPERM') {
+      if (confirmGroupExit(pid)) return;
+    }
+    throw error;
+  }
+}
 export async function execute(step, { cwd, env, logFile, signal }) {
   const output = createWriteStream(logFile, { flags: 'wx', mode: 0o600 });
   let timedOut = false, error, child;

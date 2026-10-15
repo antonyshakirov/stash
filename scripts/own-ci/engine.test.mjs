@@ -31,3 +31,31 @@ test('stale locks fail closed without removing another attempt lock',async t=>{c
 test('Playwright expected status requires an actual completed attempt',async t=>{const root=await fixture();t.after(()=>rm(root,{recursive:true,force:true}));const state=await realpath(await mkdtemp(join(tmpdir(),'own-ci-proof-')));t.after(()=>rm(state,{recursive:true,force:true}));const report={config:{projects:[{name:'desktop'}]},errors:[],suites:[{specs:[{id:'case-1',file:'fixture.spec.ts',title:'must run',tests:[{projectName:'desktop',status:'expected',results:[]}]}]}]};const fake={...plan,steps:[{...plan.steps[0],args:['-e',`require('fs').writeFileSync('result.json',JSON.stringify(${JSON.stringify(report)}))`]}],artifacts:[{path:'result.json',type:'playwright',projects:['desktop'],minimumPassed:1}]};const proof=await runGate({root,state,plan:fake});assert.equal(proof.status,'failed');});
 test('a preexisting test report cannot certify a fresh run',async t=>{const root=await fixture();t.after(()=>rm(root,{recursive:true,force:true}));const report={success:true,numPassedTests:1,numFailedTests:0,numPendingTests:0,testResults:[{name:'old.test.ts',assertionResults:[{status:'passed',fullName:'old result'}]}]};await writeFile(join(root,'result.json'),JSON.stringify(report));git(root,['add','result.json']);git(root,['commit','-qm','old report']);const state=await realpath(await mkdtemp(join(tmpdir(),'own-ci-proof-')));t.after(()=>rm(state,{recursive:true,force:true}));const proof=await runGate({root,state,plan:{...plan,artifacts:[{path:'result.json',type:'vitest',minimumPassed:1}]}});assert.equal(proof.status,'failed');assert.match(proof.errors.join(' '),/preexisting|fresh/i);});
 test('a skipped browser attempt cannot count as a passed scenario',async t=>{const root=await fixture();t.after(()=>rm(root,{recursive:true,force:true}));const state=await realpath(await mkdtemp(join(tmpdir(),'own-ci-proof-')));t.after(()=>rm(state,{recursive:true,force:true}));const report={config:{projects:[{name:'desktop'}]},errors:[],suites:[{specs:[{id:'case-1',file:'fixture.spec.ts',title:'must run',tests:[{projectName:'desktop',status:'expected',results:[{status:'skipped',retry:0}]}]}]}]};const fake={...plan,steps:[{...plan.steps[0],args:['-e',`require('fs').writeFileSync('result.json',JSON.stringify(${JSON.stringify(report)}))`]}],artifacts:[{path:'result.json',type:'playwright',projects:['desktop'],minimumPassed:1}]};assert.equal((await runGate({root,state,plan:fake})).status,'failed');});
+
+test('Darwin post-exit cleanup recognizes only an empty or fully zombie process group', async()=>{
+  const {processGroupHasNoLiveMembers}=await import('./engine.mjs');
+  assert.equal(processGroupHasNoLiveMembers('',12345),true);
+  assert.equal(processGroupHasNoLiveMembers(' 99 12345 501 Z\n 100 12345 501 ZN',12345),true);
+  assert.equal(processGroupHasNoLiveMembers(' 99 12345 501 S',12345),false);
+  assert.equal(processGroupHasNoLiveMembers(' 99 12345 0 R',12345),false);
+  assert.equal(processGroupHasNoLiveMembers(' 99 12346 501 S',12345),true);
+  assert.throws(()=>processGroupHasNoLiveMembers('unexpected ps format',12345));
+});
+
+test('post-exit cleanup waits for an observed transient process, never treats it as dead',async()=>{
+ const {confirmGroupExit}=await import('./engine.mjs');let probes=0,pauses=0;
+ assert.equal(confirmGroupExit(12345,{snapshot:()=>++probes<3?'99 12345 501 ?E':'',pause:()=>pauses++}),true);
+ assert.equal(probes,3);assert.equal(pauses,2);
+});
+test('post-exit cleanup remains fail-closed for a live or uninspectable process group',async()=>{
+ const {confirmGroupExit}=await import('./engine.mjs');let probes=0;
+ assert.equal(confirmGroupExit(12345,{snapshot:()=>{probes++;return '99 12345 501 S';},pause:()=>{}}),false);assert.equal(probes,20);
+ assert.throws(()=>confirmGroupExit(12345,{snapshot:()=>{throw Error('ps denied');},pause:()=>{}}),/ps denied/);
+ assert.throws(()=>confirmGroupExit(12345,{snapshot:()=>'?E unknown',pause:()=>{}}),/Cannot verify/);
+});
+
+test('guarded fetch preserves Promise rejection semantics for best-effort side effects',async t=>{
+ const root=await fixture();t.after(()=>rm(root,{recursive:true,force:true}));const state=await realpath(await mkdtemp(join(tmpdir(),'own-ci-proof-')));t.after(()=>rm(state,{recursive:true,force:true}));
+ const script="const assert=require('node:assert/strict');let pending;assert.doesNotThrow(()=>{pending=fetch('https://example.invalid/never-send')});assert(pending instanceof Promise);pending.then(()=>{throw Error('External request escaped')},error=>{assert.match(error.message,/EXTERNAL_NETWORK_BLOCKED/);console.log('Promise rejection preserved; no request sent')});";
+ const result=await runGate({root,state,plan:{...plan,steps:[{...plan.steps[0],args:['-e',script]}]}});assert.equal(result.status,'passed');
+});

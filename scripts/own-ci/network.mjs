@@ -33,7 +33,7 @@ tls.connect = function (...args) {
   return tlsConnect.apply(this, args)
 }
 const originalFetch = globalThis.fetch
-globalThis.fetch = function (value, ...args) {
+globalThis.fetch = async function (value, ...args) {
   const target = typeof value === 'object' && value?.url ? value.url : value
   if (!(args[0]?.dispatcher && new URL(target).hostname === 'provider.test')) checkRequest(target)
   return originalFetch.call(this, value, ...args)
